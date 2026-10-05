@@ -1,0 +1,1437 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+  <head>
+    <!-- Define a codificação dos caracteres para exibir corretamente acentos e símbolos. -->
+    <meta charset="utf-8">
+    <!-- Faz a página se adaptar à largura de celulares e outros dispositivos. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Texto que aparece na aba do navegador. -->
+    <title>YODA</title>
+    <style>
+      /* Cores e estilos gerais inspirados na identidade visual do QuintoAndar.
+         As variáveis abaixo facilitam trocar as cores do projeto depois. */
+      :root {
+        /* Tema inicial. O JavaScript altera esse atributo ao clicar nos botões. */
+        color-scheme: light;
+        font-family: Inter, "Segoe UI", system-ui, sans-serif;
+        --page-background: #f3f7f5;
+        --panel-background: #ffffff;
+        --text-color: #103497;
+        --muted-color: #687d77;
+        --border-color: #dce8e2;
+        --assistant-message: #edf5f0;
+        --brand-color: #0a24b4;
+        --brand-hover: #1624a8;
+        --error-color: #a12c3b;
+        background: var(--page-background);
+        color: var(--text-color);
+      }
+
+      /* Cores aplicadas quando o tema escuro está selecionado. */
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --page-background: #121212;
+        --panel-background: #202020;
+        --text-color: #f2f2f2;
+        --muted-color: #a5a5a5;
+        --border-color: #303030;
+        --assistant-message: #292929;
+        --brand-color: #687df5;
+        --brand-hover: #5369e0;
+        --error-color: #ffb8c0;
+      }
+
+      /* Inclui bordas e espaçamentos no cálculo do tamanho dos elementos. */
+      * { box-sizing: border-box; }
+
+      /* Centraliza o conjunto de fontes e conversa na tela. */
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background-color: #070816;
+      }
+
+      /* Nebulosas em movimento lento para dar profundidade ao fundo galáctico. */
+      body::before {
+        position: fixed;
+        z-index: 0;
+        inset: -12%;
+        background-image:
+          radial-gradient(ellipse at 18% 16%, #573aa044 0, transparent 34%),
+          radial-gradient(ellipse at 82% 76%, #153d764d 0, transparent 38%),
+          radial-gradient(ellipse at 72% 12%, #7b326b2b 0, transparent 28%);
+        background-size: 125% 125%;
+        content: "";
+        pointer-events: none;
+        animation: nebula-drift 48s ease-in-out infinite alternate;
+      }
+
+      /* Campo denso de estrelas que atravessa o fundo em ciclos contínuos. */
+      body::after {
+        position: fixed;
+        z-index: 0;
+        inset: 0;
+        background-image:
+          radial-gradient(1px 1px at 12px 18px, #ffffffd9 99%, transparent),
+          radial-gradient(1px 1px at 48px 67px, #c8d8ffcc 99%, transparent),
+          radial-gradient(1px 1px at 91px 29px, #ffffffc9 99%, transparent),
+          radial-gradient(1px 1px at 137px 104px, #ded5ffcc 99%, transparent),
+          radial-gradient(1px 1px at 188px 46px, #ffffffd9 99%, transparent),
+          radial-gradient(1px 1px at 226px 151px, #bfcaffcc 99%, transparent),
+          radial-gradient(1px 1px at 29px 177px, #ffffffcc 99%, transparent),
+          radial-gradient(1px 1px at 83px 218px, #ded5ffcc 99%, transparent),
+          radial-gradient(1px 1px at 119px 161px, #ffffffd9 99%, transparent),
+          radial-gradient(1px 1px at 171px 236px, #c8d8ffcc 99%, transparent),
+          radial-gradient(1px 1px at 213px 92px, #ffffffcc 99%, transparent),
+          radial-gradient(1.5px 1.5px at 69px 126px, #ffffffd9 99%, transparent),
+          radial-gradient(1.5px 1.5px at 156px 18px, #ded5ffcc 99%, transparent),
+          radial-gradient(1.5px 1.5px at 235px 212px, #ffffffd9 99%, transparent);
+        background-size: 250px 240px;
+        content: "";
+        opacity: .65;
+        pointer-events: none;
+        animation:
+          stars-pass 8s linear infinite,
+          stars-twinkle 3s ease-in-out infinite alternate;
+      }
+
+      @keyframes nebula-drift {
+        from { transform: translate3d(-1%, -1%, 0) rotate(-1deg) scale(1); }
+        to { transform: translate3d(1%, 1%, 0) rotate(1deg) scale(1.04); }
+      }
+
+      @keyframes stars-pass {
+        to { background-position: 250px 240px; }
+      }
+
+      @keyframes stars-twinkle {
+        from { opacity: .4; }
+        to { opacity: .9; }
+      }
+
+      /* Layout com painel lateral de fontes e área principal da conversa. */
+      .app-shell {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr);
+        gap: 12px;
+        width: min(1120px, 100%);
+        height: min(820px, calc(100vh - 48px));
+      }
+
+      /* Painel de documentos inspirado na lista de fontes do NotebookLM. */
+      .sources-panel {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 18px;
+        overflow: hidden;
+        padding: 20px 16px;
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        background: var(--panel-background);
+        box-shadow: 0 24px 80px #173c3020;
+      }
+
+      .sources-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .sources-heading h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .sources-count {
+        color: var(--muted-color);
+        font-size: 12px;
+      }
+
+      /* Botão largo para adicionar documentos à lista de fontes. */
+      .add-files {
+        display: flex;
+        width: 100%;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        padding: 9px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--assistant-message);
+        color: var(--text-color);
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .add-files:hover:not(:disabled) {
+        border-color: var(--brand-color);
+        background: var(--assistant-message);
+      }
+
+      .add-files .plus {
+        font-size: 22px;
+        font-weight: 300;
+        line-height: 16px;
+      }
+
+      /* Linha para selecionar ou desmarcar todas as fontes de uma vez. */
+      .sources-select-all {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 4px;
+        color: var(--muted-color);
+        font-size: 13px;
+      }
+
+      .sources-select-all label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-color);
+        cursor: pointer;
+      }
+
+      input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: var(--brand-color);
+        cursor: pointer;
+      }
+
+      /* Lista vertical e rolável das fontes adicionadas. */
+      .file-list {
+        display: flex;
+        min-height: 0;
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        overflow-y: auto;
+      }
+
+      .source-row {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) 20px 20px;
+        align-items: center;
+        gap: 10px;
+        min-height: 40px;
+        padding: 5px 4px;
+        border-radius: 8px;
+      }
+
+      .source-row:hover {
+        background: var(--assistant-message);
+      }
+
+      .file-type {
+        display: grid;
+        width: 18px;
+        height: 22px;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        color: #dc3545;
+        font-size: 7px;
+        font-weight: 800;
+      }
+
+      .file-type.doc {
+        color: #2673c8;
+      }
+
+      .source-name {
+        overflow: hidden;
+        color: var(--text-color);
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .source-remove {
+        width: 20px;
+        min-width: 20px;
+        height: 24px;
+        padding: 0;
+        background: transparent;
+        color: var(--muted-color);
+        font-size: 16px;
+        opacity: 0;
+      }
+
+      .source-row:hover .source-remove,
+      .source-remove:focus-visible {
+        opacity: 1;
+      }
+
+      .source-remove:hover:not(:disabled) {
+        background: transparent;
+        color: var(--error-color);
+      }
+
+      .sources-empty {
+        padding: 12px 4px;
+        color: var(--muted-color);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* Caixa principal do chat. */
+      .chat {
+        width: auto;
+        min-width: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        background: var(--panel-background);
+        box-shadow: 0 24px 80px #173c3020;
+      }
+
+      /* Cabeçalho com o nome do assistente e uma descrição. */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 22px 24px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      /* Aparência do título e do texto menor no cabeçalho. */
+      h1 { margin: 0; font-size: 18px; }
+      header p { margin: 6px 0 0; color: var(--muted-color); font-size: 13px; }
+
+      /* Agrupa a logo e o nome do assistente na mesma linha. */
+      .brand-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .brand-logo {
+        display: block;
+        width: 42px;
+        height: 52px;
+        object-fit: contain;
+      }
+
+      /* Camadas animadas posicionadas sobre o rosto do personagem da logo. */
+      .brand-character {
+        position: relative;
+        width: 42px;
+        height: 52px;
+        flex: 0 0 42px;
+      }
+
+      .brand-character .brand-logo {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* Pálpebras azuis que fecham brevemente os olhos em intervalos. */
+      .character-eyelid {
+        position: absolute;
+        top: 14%;
+        width: 14%;
+        height: 5%;
+        border-radius: 50%;
+        background: #40599f;
+        opacity: 0;
+        transform: scaleY(.08);
+        transform-origin: center;
+        animation: character-blink 5.2s infinite;
+      }
+
+      .character-eyelid.left { left: 31%; }
+      .character-eyelid.right { left: 57%; }
+
+      @keyframes character-blink {
+        0%, 3%, 7%, 100% { opacity: 0; transform: scaleY(.08); }
+        4%, 6% { opacity: .96; transform: scaleY(1); }
+      }
+
+      /* Boca pequena que abre e fecha suavemente durante a animação. */
+      .character-mouth {
+        position: absolute;
+        top: 19%;
+        left: 47%;
+        width: 7%;
+        height: 3%;
+        border-radius: 50%;
+        background: #10172e;
+        opacity: .9;
+        transform: scaleY(.35);
+        transform-origin: center;
+        animation: character-mouth-move 1.4s ease-in-out infinite;
+      }
+
+      @keyframes character-mouth-move {
+        0%, 100% { transform: scaleY(.3); }
+        50% { transform: scaleY(1.35); }
+      }
+
+      /* Cápsula com ícone e rótulo para alternar entre os temas. */
+      .theme-toggle {
+        flex-shrink: 0;
+        position: relative;
+        width: 190px;
+        min-width: 190px;
+        height: 48px;
+        padding: 5px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--brand-color);
+        color: #ffffff;
+        text-align: center;
+        box-shadow: 0 4px 12px #173c3026;
+        transition: transform 180ms ease, background-color 220ms ease, box-shadow 180ms ease;
+      }
+
+      /* Responde ao cursor, teclado e clique para o seletor parecer interativo. */
+      .theme-toggle:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 7px 18px #173c3033;
+      }
+
+      .theme-toggle:active {
+        transform: translateY(0) scale(.96);
+      }
+
+      .theme-toggle:focus-visible {
+        outline: 3px solid var(--text-color);
+        outline-offset: 4px;
+      }
+
+      /* Círculo claro que contém o ícone do tema atual. */
+      .theme-icon {
+        display: grid;
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        width: 38px;
+        height: 38px;
+        flex-shrink: 0;
+        place-items: center;
+        border-radius: 50%;
+        background: #ffffff;
+        color: var(--brand-color);
+        transition: transform 360ms cubic-bezier(.2, .8, .2, 1), color 220ms ease;
+      }
+
+      /* Desliza o círculo para a direita no modo escuro e para a esquerda no claro. */
+      .theme-toggle[aria-pressed="true"] .theme-icon {
+        transform: translateX(142px);
+      }
+
+      .theme-label {
+        display: block;
+        position: absolute;
+        right: 8px;
+        left: 52px;
+        transition: left 360ms cubic-bezier(.2, .8, .2, 1), right 360ms cubic-bezier(.2, .8, .2, 1);
+      }
+
+      .theme-toggle[aria-pressed="true"] .theme-label {
+        right: 52px;
+        left: 8px;
+      }
+
+      .theme-icon svg {
+        width: 23px;
+        height: 23px;
+        transition: transform 220ms ease;
+      }
+
+      /* O ícone gira e aumenta levemente ao trocar de tema. */
+      .theme-icon.is-animating svg {
+        animation: theme-icon-change 420ms cubic-bezier(.2, .8, .2, 1);
+      }
+
+      @keyframes theme-icon-change {
+        50% { transform: rotate(35deg) scale(1.2); }
+      }
+
+      /* Anima a mudança de cor do tema sem afetar o posicionamento do chat. */
+      :root,
+      .sources-panel,
+      .chat,
+      header,
+      .assistant,
+      .source-row,
+      .add-files,
+      textarea {
+        transition: background-color 220ms ease, color 220ms ease, border-color 220ms ease;
+      }
+
+      /* Nome em português do tema para o qual o botão vai alternar. */
+      .theme-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      /* Agrupa as configurações e o controle de tema no cabeçalho. */
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .settings-wrap {
+        position: relative;
+      }
+
+      /* Botão de engrenagem para abrir as opções do assistente. */
+      .settings-trigger {
+        display: grid;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid var(--border-color);
+        border-radius: 50%;
+        background: var(--panel-background);
+        color: var(--text-color);
+        transition: transform 180ms ease, background-color 180ms ease;
+      }
+
+      .settings-trigger:hover {
+        transform: rotate(30deg);
+      }
+
+      .settings-trigger svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      /* Menu compacto que aparece ao abrir as configurações. */
+      .settings-menu {
+        position: absolute;
+        z-index: 5;
+        top: calc(100% + 10px);
+        right: 0;
+        width: 220px;
+        padding: 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--panel-background);
+        box-shadow: 0 12px 32px #0004;
+        color: var(--text-color);
+      }
+
+      .settings-menu[hidden] {
+        display: none;
+      }
+
+      .settings-menu-title {
+        margin: 0 0 10px;
+        color: var(--muted-color);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+      }
+
+      .feedback-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-width: 0;
+        padding: 8px 4px;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-color);
+        font-size: 14px;
+        font-weight: 400;
+        text-align: left;
+      }
+
+      .feedback-option:hover:not(:disabled) {
+        background: var(--assistant-message);
+      }
+
+      .feedback-option svg {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+        color: var(--brand-color);
+      }
+
+      /* Janela modal para preencher e enviar uma avaliação sobre o protótipo. */
+      .feedback-dialog {
+        width: min(480px, calc(100vw - 32px));
+        max-width: none;
+        max-height: min(90vh, 720px);
+        padding: 0;
+        overflow: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        background: var(--panel-background);
+        color: var(--text-color);
+        box-shadow: 0 24px 80px #0007;
+      }
+
+      .feedback-dialog::backdrop {
+        background: #050711b8;
+        backdrop-filter: blur(4px);
+      }
+
+      .feedback-content {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        padding: 24px;
+      }
+
+      .feedback-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .feedback-heading h2,
+      .feedback-success h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .feedback-heading p,
+      .feedback-success p {
+        margin: 6px 0 0;
+        color: var(--muted-color);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      #feedback-form {
+        padding: 0;
+        border: 0;
+      }
+
+      .feedback-form-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .feedback-close {
+        width: 34px;
+        min-width: 34px;
+        height: 34px;
+        padding: 0;
+        border: 1px solid var(--border-color);
+        border-radius: 50%;
+        background: var(--panel-background);
+        color: var(--text-color);
+        font-size: 20px;
+      }
+
+      .feedback-field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .feedback-field label,
+      .feedback-rating legend {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .feedback-field select,
+      .feedback-field textarea,
+      .feedback-field input {
+        width: 100%;
+        min-height: 42px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        outline: none;
+        background: var(--panel-background);
+        color: var(--text-color);
+        font: inherit;
+        font-size: 14px;
+      }
+
+      .feedback-field textarea {
+        min-height: 112px;
+        resize: vertical;
+      }
+
+      .feedback-field select:focus,
+      .feedback-field textarea:focus,
+      .feedback-field input:focus {
+        border-color: var(--brand-color);
+      }
+
+      .feedback-rating {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      .rating-options {
+        display: flex;
+        gap: 10px;
+      }
+
+      .rating-options label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--muted-color);
+        font-size: 13px;
+      }
+
+      .feedback-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 2px;
+      }
+
+      .feedback-actions button {
+        min-height: 42px;
+      }
+
+      .feedback-cancel {
+        border: 1px solid var(--border-color);
+        background: var(--panel-background);
+        color: var(--text-color);
+      }
+
+      .feedback-success {
+        padding: 12px 0;
+        text-align: center;
+      }
+
+      .feedback-success[hidden] {
+        display: none;
+      }
+
+      .feedback-success-icon {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 14px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--assistant-message);
+        color: var(--brand-color);
+        font-size: 24px;
+      }
+
+      .feedback-note {
+        margin: 0;
+        color: var(--muted-color);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      /* Área rolável onde as mensagens da conversa são exibidas. */
+      #messages {
+        position: relative;
+        isolation: isolate;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow-y: auto;
+        padding: 24px;
+      }
+
+      /* Usa somente o desenho da imagem como marca d'água atrás das mensagens. */
+      #messages::before {
+        position: absolute;
+        z-index: 0;
+        inset: 0;
+        width: min(70%, 420px);
+        aspect-ratio: 471 / 381;
+        margin: auto;
+        background-color: var(--text-color);
+        content: "";
+        opacity: .09;
+        pointer-events: none;
+        -webkit-mask-image: url("./marca-agua.png");
+        mask-image: url("./marca-agua.png");
+        -webkit-mask-position: center;
+        mask-position: center;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+      }
+
+      /* Aparência comum a todas as mensagens, incluindo quebra de textos longos. */
+      .message {
+        position: relative;
+        z-index: 1;
+        max-width: min(85%, 580px);
+        padding: 13px 16px;
+        border-radius: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      /* Alinha e colore as mensagens da IA, do usuário e avisos de erro. */
+      .assistant { align-self: flex-start; background: var(--assistant-message); }
+      .user { align-self: flex-end; background: var(--brand-color); color: #ffffff; }
+      .error { color: var(--error-color); border: 1px solid #e7b9bf; }
+
+      /* Organiza o campo de texto e o botão na parte inferior do chat. */
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 18px;
+        border-top: 1px solid var(--border-color);
+      }
+
+      /* Créditos da equipe exibidos discretamente no rodapé do chat. */
+      .credits-footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 6px 16px;
+        padding: 10px 18px;
+        border-top: 1px solid var(--border-color);
+        color: var(--muted-color);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      .credits-footer p {
+        margin: 0;
+      }
+
+      .credits-footer strong {
+        color: var(--text-color);
+        font-weight: 600;
+      }
+
+      /* Mantém a caixa de texto e o botão Enviar lado a lado. */
+      .composer-row {
+        display: flex;
+        gap: 12px;
+      }
+
+      /* Campo onde a pessoa escreve a mensagem. */
+      textarea {
+        min-height: 48px;
+        max-height: 140px;
+        flex: 1;
+        resize: vertical;
+        padding: 13px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        outline: none;
+        background: var(--panel-background);
+        color: inherit;
+        font: inherit;
+      }
+
+      /* Destaca o campo de texto enquanto ele está selecionado. */
+      textarea:focus { border-color: var(--brand-color); }
+
+      /* Aparência do botão para enviar a mensagem. */
+      button {
+        min-width: 88px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--brand-color);
+        color: white;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      /* Escurece o botão quando o cursor passa por cima. */
+      button:hover:not(:disabled) { background: var(--brand-hover); }
+
+      /* Destaca o botão Enviar ao passar o cursor e dá retorno ao pressioná-lo. */
+      #send {
+        transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+      }
+
+      #send:hover:not(:disabled) {
+        transform: translateY(-3px) scale(1.03);
+        box-shadow: 0 8px 18px #173c3040;
+      }
+
+      #send:active:not(:disabled) {
+        transform: translateY(0) scale(.97);
+      }
+
+      /* Indica visualmente que o envio está sendo processado. */
+      button:disabled { cursor: wait; opacity: .6; }
+
+      /* Respeita a configuração do sistema para reduzir animações. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: .01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: .01ms !important;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        body::before,
+        body::after {
+          animation: none;
+        }
+
+        .character-eyelid,
+        .character-mouth {
+          display: none;
+          animation: none;
+        }
+      }
+
+      /* Ajusta os espaçamentos e a altura em telas menores, como celulares. */
+      @media (max-width: 680px) {
+        body { padding: 0; }
+        .app-shell {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: minmax(210px, 36vh) minmax(0, 1fr);
+          gap: 8px;
+          height: 100vh;
+        }
+        .sources-panel {
+          gap: 12px;
+          padding: 14px;
+          border-radius: 0 0 16px 16px;
+        }
+        .chat { height: auto; border-radius: 16px 16px 0 0; }
+        header { padding: 16px; }
+        header p { max-width: 240px; }
+        .header-actions {
+          gap: 6px;
+        }
+        .theme-toggle {
+          width: 154px;
+          min-width: 154px;
+        }
+        .settings-trigger {
+          width: 36px;
+          min-width: 36px;
+          height: 36px;
+        }
+        .theme-toggle[aria-pressed="true"] .theme-icon {
+          transform: translateX(106px);
+        }
+        .theme-label {
+          font-size: 10px;
+        }
+        #messages { padding: 18px; }
+        form { padding: 12px; }
+        .credits-footer {
+          justify-content: center;
+          padding: 9px 12px;
+          text-align: center;
+        }
+        .composer-row { align-items: stretch; }
+        .composer-row textarea { min-width: 0; }
+        .source-remove { opacity: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app-shell" aria-label="Assistente MIMIR">
+      <!-- Painel lateral de fontes, com lista de documentos selecionáveis. -->
+      <aside class="sources-panel" aria-labelledby="sources-title">
+        <div class="sources-heading">
+          <h2 id="sources-title">Fontes</h2>
+          <span class="sources-count" id="sources-count">0 fontes</span>
+        </div>
+        <input id="file-input" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+        <button class="add-files" id="add-files" type="button">
+          <span class="plus" aria-hidden="true">+</span>
+          Adicionar fontes
+        </button>
+        <div class="sources-select-all">
+          <span id="selected-count">0 selecionadas</span>
+          <label for="select-all">Selecionar tudo
+            <input id="select-all" type="checkbox" aria-label="Selecionar todas as fontes" disabled>
+          </label>
+        </div>
+        <!-- As fontes adicionadas aparecem aqui como linhas selecionáveis. -->
+        <div class="file-list" id="file-list" aria-live="polite">
+          <p class="sources-empty" id="sources-empty">Seus documentos adicionados aparecerão aqui.</p>
+        </div>
+      </aside>
+
+      <!-- Área principal da conversa. -->
+      <section class="chat" aria-label="Conversa com o assistente">
+        <header>
+          <!-- Altere o título e a descrição para personalizar a apresentação. -->
+          <div>
+            <div class="brand-title">
+              <span class="brand-character">
+                <img class="brand-logo" src="./logo-yoda.png" alt="Logo do YODA">
+                <span class="character-eyelid left" aria-hidden="true"></span>
+                <span class="character-eyelid right" aria-hidden="true"></span>
+                <span class="character-mouth" aria-hidden="true"></span>
+              </span>
+              <h1>YODA</h1>
+            </div>
+            <p></p>
+          </div>
+          <div class="header-actions">
+            <!-- Engrenagem que mostra as opções disponíveis do assistente. -->
+            <div class="settings-wrap">
+              <button class="settings-trigger" id="settings-trigger" type="button" aria-label="Abrir configurações" aria-expanded="false" aria-controls="settings-menu">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.7 7.7 0 0 1-1.5.9l-.2 1.5h-2.2l-.4-1.4a7.4 7.4 0 0 1-1.7 0l-.8 1.2-1.9-1.1.5-1.4a7.7 7.7 0 0 1-.9-1.5l-1.5-.2v-2.2l1.4-.4a7.4 7.4 0 0 1 0-1.7l-1.2-.8 1.1-1.9 1.4.5a7.7 7.7 0 0 1 1.5-.9l.2-1.5h2.2l.4 1.4a7.4 7.4 0 0 1 1.7 0l.8-1.2 1.9 1.1-.5 1.4a7.7 7.7 0 0 1 .9 1.5l1.5.2v2.2l-1.4.4a7.4 7.4 0 0 1 0 1.7Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div class="settings-menu" id="settings-menu" role="region" aria-label="Configurações" hidden>
+                <p class="settings-menu-title">Configurações</p>
+                <button class="feedback-option" id="open-feedback" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-5.2A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M8 11.5h8m-8 3h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <span>Receber feedback</span>
+                </button>
+              </div>
+            </div>
+            <!-- Botão em formato de cápsula que alterna o tema. -->
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Ativar tema claro" aria-pressed="true">
+              <span class="theme-icon" id="theme-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span class="theme-label" id="theme-label">Modo claro</span>
+            </button>
+          </div>
+        </header>
+        <!-- O JavaScript adiciona aqui as mensagens enviadas e recebidas. -->
+        <section id="messages" aria-live="polite">
+          <!-- Mensagem inicial, exibida antes de qualquer interação. -->
+          <div class="message assistant">Olá! Em que posso ajudar você?</div>
+        </section>
+        <!-- Formulário para enviar a pergunta sobre as fontes selecionadas. -->
+        <form id="chat-form">
+          <div class="composer-row">
+            <textarea id="prompt" placeholder="Pergunte sobre as fontes selecionadas..." aria-label="Sua pergunta sobre os arquivos" required></textarea>
+            <button id="send" type="submit">Enviar</button>
+          </div>
+        </form>
+        <!-- Créditos de desenvolvimento e autoria do projeto. -->
+        <footer class="credits-footer">
+          <p><strong>Desenvolvido por:</strong> Gabriela Libarino &amp; Rudson Moreira</p>
+          <p><strong>FrontEnd:</strong> Gabriela Libarino</p>
+          <p><strong>BackEnd:</strong> Rudson Moreira</p>
+        </footer>
+      </section>
+    </main>
+    <!-- Formulário de feedback; nesta versão o envio é apenas demonstrativo. -->
+    <dialog class="feedback-dialog" id="feedback-dialog" aria-labelledby="feedback-title">
+      <div class="feedback-content">
+        <div class="feedback-heading">
+          <div>
+            <h2 id="feedback-title">Enviar feedback</h2>
+            <p>Conte o que achou do YODA ou deixe uma sugestão para melhorá-lo.</p>
+          </div>
+          <button class="feedback-close" id="close-feedback" type="button" aria-label="Fechar formulário">×</button>
+        </div>
+        <form id="feedback-form">
+          <div class="feedback-form-fields">
+            <div class="feedback-field">
+              <label for="feedback-type">Tipo de feedback</label>
+              <select id="feedback-type" name="type" required>
+                <option value="" selected disabled>Selecione uma opção</option>
+                <option value="suggestion">Sugestão</option>
+                <option value="compliment">Elogio</option>
+                <option value="problem">Problema</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+            <fieldset class="feedback-rating">
+              <legend>Como você avalia sua experiência?</legend>
+              <div class="rating-options">
+                <label><input type="radio" name="rating" value="1" required> 1</label>
+                <label><input type="radio" name="rating" value="2"> 2</label>
+                <label><input type="radio" name="rating" value="3"> 3</label>
+                <label><input type="radio" name="rating" value="4"> 4</label>
+                <label><input type="radio" name="rating" value="5"> 5</label>
+              </div>
+            </fieldset>
+            <div class="feedback-field">
+              <label for="feedback-message">Comentário ou sugestão</label>
+              <textarea id="feedback-message" name="message" placeholder="O que podemos melhorar? Conte para nós..." required maxlength="1000"></textarea>
+            </div>
+            <div class="feedback-field">
+              <label for="feedback-email">E-mail (opcional)</label>
+              <input id="feedback-email" name="email" type="email" placeholder="voce@exemplo.com" autocomplete="email">
+            </div>
+            <p class="feedback-note">Demonstração: o feedback ainda não é salvo nem enviado.</p>
+            <div class="feedback-actions">
+              <button class="feedback-cancel" id="cancel-feedback" type="button">Cancelar</button>
+              <button type="submit">Enviar feedback</button>
+            </div>
+          </div>
+        </form>
+        <section class="feedback-success" id="feedback-success" aria-live="polite" hidden>
+          <span class="feedback-success-icon" aria-hidden="true">✓</span>
+          <h2>Obrigado pelo feedback!</h2>
+          <p>O formulário foi validado. Nesta versão de demonstração, a resposta não foi salva nem enviada.</p>
+          <div class="feedback-actions">
+            <button id="finish-feedback" type="button">Fechar</button>
+          </div>
+        </section>
+      </div>
+    </dialog>
+    <script>
+      // Endereço da API local: substitua pela URL e rota informadas pelo desenvolvedor do backend.
+      const API_URL = "http://localhost:5000/perguntar";
+      // O backend deve receber multipart/form-data e extrair as fontes dos documentos.
+      // Para garantir respostas somente com base nos arquivos, essa regra também deve ser aplicada no backend.
+      const REQUEST_FIELD = "message";
+      const FILES_FIELD = "files";
+      // Nome do campo de texto esperado na resposta JSON; por exemplo, { "response": "Olá" }.
+      const RESPONSE_FIELD = "response";
+
+      // Busca na página os elementos que o JavaScript precisa controlar.
+      const form = document.querySelector("#chat-form");
+      const input = document.querySelector("#prompt");
+      const sendButton = document.querySelector("#send");
+      const messages = document.querySelector("#messages");
+      const fileInput = document.querySelector("#file-input");
+      const addFilesButton = document.querySelector("#add-files");
+      const fileList = document.querySelector("#file-list");
+      const selectAllCheckbox = document.querySelector("#select-all");
+      const selectedCount = document.querySelector("#selected-count");
+      const sourcesCount = document.querySelector("#sources-count");
+      // Guarda cada documento e se ele está marcado para ser usado na consulta.
+      let sources = [];
+      let isSending = false;
+      // Botão e elementos visuais do seletor de tema.
+      const themeToggle = document.querySelector("#theme-toggle");
+      const themeIcon = document.querySelector("#theme-icon");
+      const themeLabel = document.querySelector("#theme-label");
+      const settingsTrigger = document.querySelector("#settings-trigger");
+      const settingsMenu = document.querySelector("#settings-menu");
+      const openFeedbackButton = document.querySelector("#open-feedback");
+      const feedbackDialog = document.querySelector("#feedback-dialog");
+      const feedbackForm = document.querySelector("#feedback-form");
+      const feedbackSuccess = document.querySelector("#feedback-success");
+
+      // Atualiza o tema da página, o ícone e o rótulo da próxima opção.
+      function setTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        const darkThemeIsActive = theme === "dark";
+        themeToggle.setAttribute("aria-pressed", String(darkThemeIsActive));
+        themeToggle.setAttribute("aria-label", darkThemeIsActive ? "Ativar tema claro" : "Ativar tema escuro");
+        themeLabel.textContent = darkThemeIsActive ? "Modo claro" : "Modo escuro";
+        themeIcon.innerHTML = darkThemeIsActive
+          ? '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.7 8.7 0 1 0 20.2 15.1Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m17.5 3 .5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z" fill="currentColor"/></svg>';
+        // Reinicia a animação do ícone em cada alternância.
+        themeIcon.classList.remove("is-animating");
+        void themeIcon.offsetWidth;
+        themeIcon.classList.add("is-animating");
+      }
+
+      // Ao clicar, troca para o tema oposto ao que está ativo.
+      themeToggle.addEventListener("click", () => {
+        const currentTheme = document.documentElement.dataset.theme || "light";
+        setTheme(currentTheme === "light" ? "dark" : "light");
+      });
+
+      // Abre ou fecha o menu de configurações ao clicar na engrenagem.
+      settingsTrigger.addEventListener("click", () => {
+        const isOpen = settingsTrigger.getAttribute("aria-expanded") === "true";
+        settingsTrigger.setAttribute("aria-expanded", String(!isOpen));
+        settingsMenu.hidden = isOpen;
+      });
+
+      // Abre o formulário escolhido dentro do menu de configurações.
+      openFeedbackButton.addEventListener("click", () => {
+        settingsMenu.hidden = true;
+        settingsTrigger.setAttribute("aria-expanded", "false");
+        feedbackDialog.showModal();
+        document.querySelector("#feedback-type").focus();
+      });
+
+      // Valida os campos e mostra uma confirmação sem enviar dados nesta versão.
+      feedbackForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        feedbackForm.hidden = true;
+        feedbackSuccess.hidden = false;
+      });
+
+      // Descarta os dados e restaura o formulário ao encerrar a janela.
+      function resetFeedbackForm() {
+        feedbackForm.reset();
+        feedbackForm.hidden = false;
+        feedbackSuccess.hidden = true;
+      }
+
+      function closeFeedbackDialog() {
+        resetFeedbackForm();
+        feedbackDialog.close();
+        settingsTrigger.focus();
+      }
+
+      // Fecha o formulário pelos botões de fechar, cancelar ou confirmação.
+      document.querySelectorAll("#close-feedback, #cancel-feedback, #finish-feedback").forEach((button) => {
+        button.addEventListener("click", closeFeedbackDialog);
+      });
+
+      // Aplica o mesmo comportamento de limpeza ao fechar com a tecla Escape.
+      feedbackDialog.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        closeFeedbackDialog();
+      });
+
+      // Permite fechar a janela clicando na área escurecida ao redor.
+      feedbackDialog.addEventListener("click", (event) => {
+        if (event.target === feedbackDialog) closeFeedbackDialog();
+      });
+
+      // Fecha o menu ao clicar fora dele ou pressionar Escape.
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".settings-wrap")) {
+          settingsMenu.hidden = true;
+          settingsTrigger.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !settingsMenu.hidden) {
+          settingsMenu.hidden = true;
+          settingsTrigger.setAttribute("aria-expanded", "false");
+          settingsTrigger.focus();
+        }
+      });
+
+      // Abre o seletor de arquivos ao clicar em "Adicionar fontes".
+      addFilesButton.addEventListener("click", () => fileInput.click());
+
+      // Atualiza a lista de documentos, as caixas de seleção e os contadores.
+      function renderSources() {
+        fileList.replaceChildren();
+        const includedCount = sources.filter((source) => source.included).length;
+        selectAllCheckbox.disabled = sources.length === 0 || isSending;
+        selectAllCheckbox.checked = sources.length > 0 && includedCount === sources.length;
+        selectAllCheckbox.indeterminate = includedCount > 0 && includedCount < sources.length;
+        selectedCount.textContent = `${includedCount} selecionada(s)`;
+        sourcesCount.textContent = `${sources.length} ${sources.length === 1 ? "fonte" : "fontes"}`;
+
+        if (!sources.length) {
+          const emptyMessage = document.createElement("p");
+          emptyMessage.className = "sources-empty";
+          emptyMessage.textContent = "Seus documentos adicionados aparecerão aqui.";
+          fileList.append(emptyMessage);
+          return;
+        }
+
+        sources.forEach((source, index) => {
+          const row = document.createElement("div");
+          row.className = "source-row";
+
+          const fileType = document.createElement("span");
+          const extension = source.file.name.split(".").pop().toLowerCase();
+          fileType.className = `file-type${extension === "doc" || extension === "docx" ? " doc" : ""}`;
+          fileType.textContent = extension === "pdf" ? "PDF" : "DOC";
+          fileType.setAttribute("aria-hidden", "true");
+
+          const name = document.createElement("span");
+          name.className = "source-name";
+          name.textContent = source.file.name;
+          name.title = source.file.name;
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = source.included;
+          checkbox.disabled = isSending;
+          checkbox.setAttribute("aria-label", `Usar ${source.file.name} como fonte`);
+          checkbox.addEventListener("change", () => {
+            source.included = checkbox.checked;
+            renderSources();
+          });
+
+          const removeButton = document.createElement("button");
+          removeButton.className = "source-remove";
+          removeButton.type = "button";
+          removeButton.textContent = "×";
+          removeButton.disabled = isSending;
+          removeButton.setAttribute("aria-label", `Remover ${source.file.name}`);
+          removeButton.addEventListener("click", () => {
+            sources.splice(index, 1);
+            renderSources();
+          });
+
+          row.append(fileType, name, removeButton, checkbox);
+          fileList.append(row);
+        });
+      }
+
+      // Marca ou desmarca todas as fontes disponíveis.
+      selectAllCheckbox.addEventListener("change", () => {
+        sources.forEach((source) => {
+          source.included = selectAllCheckbox.checked;
+        });
+        renderSources();
+      });
+
+      // Acrescenta os arquivos escolhidos sem duplicar os que já estão na lista.
+      fileInput.addEventListener("change", () => {
+        const acceptedExtensions = [".pdf", ".doc", ".docx"];
+        const invalidFiles = [];
+
+        Array.from(fileInput.files).forEach((file) => {
+          const fileName = file.name.toLowerCase();
+          const isSupported = acceptedExtensions.some((extension) => fileName.endsWith(extension));
+          if (!isSupported) {
+            invalidFiles.push(file.name);
+            return;
+          }
+
+          const alreadyAdded = sources.some(({ file: addedFile }) =>
+            addedFile.name === file.name &&
+            addedFile.size === file.size &&
+            addedFile.lastModified === file.lastModified
+          );
+          if (!alreadyAdded) sources.push({ file, included: true });
+        });
+
+        renderSources();
+        fileInput.value = "";
+
+        if (invalidFiles.length) {
+          addMessage(`Formato não aceito: ${invalidFiles.join(", ")}. Selecione PDF, DOC ou DOCX.`, "assistant", true);
+        }
+      });
+
+      // Cria uma mensagem na conversa, com estilo de usuário, assistente ou erro.
+      function addMessage(text, role, isError = false) {
+        // Cria um elemento HTML para exibir o texto da mensagem.
+        const element = document.createElement("div");
+        // Aplica a aparência correspondente ao tipo de mensagem.
+        element.className = `message ${role}${isError ? " error" : ""}`;
+        // Usa textContent para mostrar o texto sem interpretá-lo como HTML.
+        element.textContent = text;
+        // Adiciona a mensagem ao final da conversa.
+        messages.append(element);
+        // Desce a área de conversa até a mensagem mais recente.
+        messages.scrollTop = messages.scrollHeight;
+        // Devolve o elemento para que possa ser atualizado depois, se necessário.
+        return element;
+      }
+
+      // Executa esta função quando o formulário é enviado.
+      form.addEventListener("submit", async (event) => {
+        // Evita que o navegador recarregue a página ao enviar o formulário.
+        event.preventDefault();
+        // Lê o texto digitado e remove espaços sobrando no início e no fim.
+        const message = input.value.trim();
+        // Não envia mensagens vazias nem permite envios repetidos enquanto aguarda.
+        if (!message || sendButton.disabled) return;
+        // Envia apenas as fontes marcadas na lista lateral.
+        const selectedSources = sources.filter((source) => source.included);
+        if (!selectedSources.length) {
+          addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
+          return;
+        }
+
+        // Mostra imediatamente a mensagem da pessoa na conversa.
+        addMessage(message, "user");
+        // Limpa o campo para permitir que a pessoa continue digitando.
+        input.value = "";
+        // Desativa o botão enquanto a IA está processando a solicitação.
+        sendButton.disabled = true;
+        isSending = true;
+        addFilesButton.disabled = true;
+        fileInput.disabled = true;
+        renderSources();
+        // Mostra um aviso temporário que será substituído pela resposta da IA.
+        const pending = addMessage("Consultando os arquivos...", "assistant");
+
+        try {
+          // Envia a pergunta e apenas as fontes marcadas como multipart/form-data.
+          // O backend precisa aceitar REQUEST_FIELD e vários campos FILES_FIELD.
+          const requestBody = new FormData();
+          requestBody.append(REQUEST_FIELD, message);
+          selectedSources.forEach(({ file }) => requestBody.append(FILES_FIELD, file));
+
+          const response = await fetch(API_URL, {
+            method: "POST",
+            // Não defina Content-Type manualmente; o navegador inclui o limite multipart correto.
+            body: requestBody
+          });
+
+          // Transforma respostas HTTP de erro em uma mensagem compreensível.
+          if (!response.ok) {
+            throw new Error(`O backend respondeu com HTTP ${response.status}.`);
+          }
+
+          // Converte a resposta JSON e lê o campo configurado em RESPONSE_FIELD.
+          const data = await response.json();
+          const answer = data[RESPONSE_FIELD];
+          // Confere se o backend retornou uma resposta de texto não vazia.
+          if (typeof answer !== "string" || !answer.trim()) {
+            throw new Error(`A resposta não contém o campo "${RESPONSE_FIELD}" como texto.`);
+          }
+          // Troca o aviso temporário pela resposta da IA.
+          pending.textContent = answer;
+        } catch (error) {
+          // Exibe uma orientação se a API não responder ou retornar dados inesperados.
+          pending.classList.add("error");
+          pending.textContent =
+            `Não foi possível falar com a IA. ${error.message} ` +
+            "Verifique se o backend está ligado, aceita multipart/form-data com os campos message e files, e permite CORS.";
+        } finally {
+          // Reativa o botão mesmo se a comunicação com o backend falhar.
+          sendButton.disabled = false;
+          isSending = false;
+          addFilesButton.disabled = false;
+          fileInput.disabled = false;
+          renderSources();
+          // Devolve o cursor ao campo de texto para facilitar a próxima mensagem.
+          input.focus();
+          // Garante que a última resposta ou erro fique visível.
+          messages.scrollTop = messages.scrollHeight;
+        }
+      });
+
+      // Permite enviar com Enter; Shift+Enter continua disponível para nova linha.
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          // Impede que Enter crie uma nova linha nesse caso.
+          event.preventDefault();
+          // Envia o formulário e reaproveita o mesmo fluxo de envio.
+          form.requestSubmit();
+        }
+      });
+    </script>
+  </body>
+</html>
