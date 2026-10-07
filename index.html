@@ -922,8 +922,32 @@
         font-weight: 600;
       }
 
+            .learning-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .learning-action {
+        min-width: 0;
+        min-height: 36px;
+        padding: 7px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--assistant-message);
+        color: var(--text-color);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .learning-action:hover:not(:disabled) {
+        border-color: var(--brand-color);
+        background: var(--assistant-message);
+      }
+
       /* Mantém a caixa de texto e o botão Enviar lado a lado. */
       .composer-row {
+
         display: flex;
         gap: 12px;
       }
@@ -1140,6 +1164,7 @@
         <!-- Formulário para enviar a pergunta sobre as fontes selecionadas. -->
         <form id="chat-form">
           <div class="composer-row">
+
             <textarea id="prompt" placeholder="Pergunte sobre as fontes selecionadas..." aria-label="Sua pergunta sobre os arquivos" required></textarea>
             <button id="send" type="submit">Enviar</button>
           </div>
@@ -1238,9 +1263,10 @@
       // Busca na página os elementos que o JavaScript precisa controlar.
       const form = document.querySelector("#chat-form");
       const input = document.querySelector("#prompt");
-      const sendButton = document.querySelector("#send");
+            const sendButton = document.querySelector("#send");
       const messages = document.querySelector("#messages");
       const fileInput = document.querySelector("#file-input");
+
       const addFilesButton = document.querySelector("#add-files");
       const fileList = document.querySelector("#file-list");
       const selectAllCheckbox = document.querySelector("#select-all");
@@ -1546,6 +1572,7 @@
 
       // Executa esta função quando o formulário é enviado.
       form.addEventListener("submit", async (event) => {
+
         // Evita que o navegador recarregue a página ao enviar o formulário.
         event.preventDefault();
         // Lê o texto digitado e remove espaços sobrando no início e no fim.
@@ -1558,6 +1585,15 @@
           addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
           return;
         }
+
+        const conversationContext = Array.from(messages.querySelectorAll(".message"))
+          .slice(-10)
+          .map((element) => {
+            const role = element.classList.contains("user") ? "Usuário" : "Assistente";
+            return `${role}: ${element.textContent.trim().slice(0, 900)}`;
+          })
+          .join("\n")
+          .slice(-6000);
 
         saveQuestionToHistory(message);
         // Mostra imediatamente a mensagem da pessoa na conversa.
@@ -1576,9 +1612,11 @@
         try {
           // Envia a pergunta e apenas as fontes marcadas como multipart/form-data.
           // O backend precisa aceitar REQUEST_FIELD e vários campos FILES_FIELD.
-          const requestBody = new FormData();
+                    const requestBody = new FormData();
           requestBody.append(REQUEST_FIELD, message);
+          requestBody.append("conversa", conversationContext);
           selectedSources.forEach(({ file }) => requestBody.append(FILES_FIELD, file));
+
 
           const response = await fetch(API_URL, {
             method: "POST",
@@ -1587,8 +1625,9 @@
           });
 
           // Transforma respostas HTTP de erro em uma mensagem compreensível.
-          if (!response.ok) {
-            throw new Error(`O backend respondeu com HTTP ${response.status}.`);
+                    if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `O backend respondeu com HTTP ${response.status}.`);
           }
 
           // Converte a resposta JSON e lê o campo configurado em RESPONSE_FIELD.
