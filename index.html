@@ -572,7 +572,60 @@
         color: var(--brand-color);
       }
 
-            /* Janela modal para consultar as perguntas recentes. */
+      /* Janela para solicitar a senha de acesso dentro da própria página. */
+      .access-dialog {
+        width: min(420px, calc(100vw - 32px));
+        max-width: none;
+        padding: 0;
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        background: var(--panel-background);
+        color: var(--text-color);
+        box-shadow: 0 24px 80px #0007;
+      }
+
+      .access-dialog::backdrop {
+        background: #050711b8;
+        backdrop-filter: blur(4px);
+      }
+
+      .access-content {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 24px;
+      }
+
+      .access-content h2,
+      .access-content p { margin: 0; }
+      .access-content h2 { font-size: 20px; }
+      .access-content p { color: var(--muted-color); font-size: 13px; }
+      .access-content label { font-size: 13px; font-weight: 600; }
+      .access-content input {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--panel-background);
+        color: var(--text-color);
+        font: inherit;
+      }
+      .access-actions { display: flex; justify-content: flex-end; gap: 10px; }
+      .access-cancel {
+        border: 1px solid var(--border-color);
+        background: var(--panel-background);
+        color: var(--text-color);
+      }
+      .access-dialog form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0;
+        border: 0;
+      }
+
+      /* Janela modal para consultar as perguntas recentes. */
       .history-dialog {
         width: min(560px, calc(100vw - 32px));
         max-width: none;
@@ -1177,7 +1230,22 @@
         </footer>
       </section>
     </main>
-        <!-- Histórico local das últimas perguntas enviadas. -->
+        <!-- Solicita a senha antes do primeiro envio. -->
+    <dialog class="access-dialog" id="access-dialog" aria-labelledby="access-title">
+      <div class="access-content">
+        <h2 id="access-title">Acesso ao YODA</h2>
+        <p>Digite a senha de acesso para enviar sua pergunta.</p>
+        <form id="access-form">
+          <label for="access-password-input">Senha de acesso</label>
+          <input id="access-password-input" type="password" autocomplete="current-password" required>
+          <div class="access-actions">
+            <button class="access-cancel" id="cancel-access" type="button">Cancelar</button>
+            <button type="submit">Continuar</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+    <!-- Histórico local das últimas perguntas enviadas. -->
     <dialog class="history-dialog" id="history-dialog" aria-labelledby="history-title">
       <div class="history-content">
         <div class="history-heading">
@@ -1258,7 +1326,48 @@
       const REQUEST_FIELD = "message";
       const FILES_FIELD = "files";
       // Nome do campo de texto esperado na resposta JSON; por exemplo, { "response": "Olá" }.
-      const RESPONSE_FIELD = "response";
+            const RESPONSE_FIELD = "response";
+      const ACCESS_PASSWORD_KEY = "yoda-access-password";
+      const accessDialog = document.querySelector("#access-dialog");
+      const accessForm = document.querySelector("#access-form");
+      const accessPasswordInput = document.querySelector("#access-password-input");
+      let resolvePasswordRequest = null;
+      let passwordRequestPromise = null;
+
+      function getAccessPassword() {
+        const savedPassword = sessionStorage.getItem(ACCESS_PASSWORD_KEY);
+        if (savedPassword) return Promise.resolve(savedPassword);
+        if (passwordRequestPromise) return passwordRequestPromise;
+
+        passwordRequestPromise = new Promise((resolve) => {
+          resolvePasswordRequest = resolve;
+          accessPasswordInput.value = "";
+          accessDialog.showModal();
+          accessPasswordInput.focus();
+        });
+        return passwordRequestPromise;
+      }
+
+      accessForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const password = accessPasswordInput.value;
+        if (!password) return;
+        sessionStorage.setItem(ACCESS_PASSWORD_KEY, password);
+        accessDialog.close();
+        if (resolvePasswordRequest) resolvePasswordRequest(password);
+        resolvePasswordRequest = null;
+        passwordRequestPromise = null;
+      });
+
+      function cancelPasswordRequest() {
+        if (resolvePasswordRequest) resolvePasswordRequest(null);
+        resolvePasswordRequest = null;
+        passwordRequestPromise = null;
+      }
+
+      document.querySelector("#cancel-access").addEventListener("click", () => accessDialog.close());
+      accessDialog.addEventListener("cancel", cancelPasswordRequest);
+      accessDialog.addEventListener("close", cancelPasswordRequest);
 
       // Busca na página os elementos que o JavaScript precisa controlar.
       const form = document.querySelector("#chat-form");
@@ -1580,9 +1689,15 @@
         // Não envia mensagens vazias nem permite envios repetidos enquanto aguarda.
         if (!message || sendButton.disabled) return;
         // Envia apenas as fontes marcadas na lista lateral.
-        const selectedSources = sources.filter((source) => source.included);
+                const selectedSources = sources.filter((source) => source.included);
                 if (!selectedSources.length) {
           addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
+          return;
+        }
+        sendButton.disabled = true;
+        const accessPassword = await getAccessPassword();
+        if (!accessPassword) {
+          sendButton.disabled = false;
           return;
         }
 
@@ -1614,6 +1729,7 @@
           // O backend precisa aceitar REQUEST_FIELD e vários campos FILES_FIELD.
                     const requestBody = new FormData();
           requestBody.append(REQUEST_FIELD, message);
+          requestBody.append("access_password", accessPassword);
           requestBody.append("conversa", conversationContext);
           selectedSources.forEach(({ file }) => requestBody.append(FILES_FIELD, file));
 
@@ -1627,6 +1743,7 @@
           // Transforma respostas HTTP de erro em uma mensagem compreensível.
                     if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
             throw new Error(errorData.error || `O backend respondeu com HTTP ${response.status}.`);
           }
 

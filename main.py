@@ -1,4 +1,5 @@
 import base64
+import hmac
 import json
 import os
 import re
@@ -41,6 +42,7 @@ def load_dotenv_file():
 load_dotenv_file()
 
 API_KEY = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+ACCESS_PASSWORD = os.environ.get("SITE_PASSWORD", "").strip()
 _models_setting = os.environ.get("GEMINI_MODELS", "").strip()
 if _models_setting:
     MODELS = [model.strip() for model in _models_setting.split(",") if model.strip()]
@@ -193,6 +195,12 @@ def add_cors_headers(response):
 def perguntar():
     if request.method == "OPTIONS":
         return ("", 204)
+
+    if not ACCESS_PASSWORD:
+        return jsonify({"error": "O acesso ainda não foi configurado pelo administrador."}), 503
+    supplied_password = request.form.get("access_password", "")
+    if not hmac.compare_digest(supplied_password, ACCESS_PASSWORD):
+        return jsonify({"error": "Senha de acesso incorreta."}), 401
 
     message = (request.form.get("message") or "").strip()
     if not message:
