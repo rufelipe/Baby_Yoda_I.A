@@ -572,6 +572,99 @@
         color: var(--brand-color);
       }
 
+            /* Janela modal para consultar as perguntas recentes. */
+      .history-dialog {
+        width: min(560px, calc(100vw - 32px));
+        max-width: none;
+        max-height: min(90vh, 720px);
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        background: var(--panel-background);
+        color: var(--text-color);
+        box-shadow: 0 24px 80px #0007;
+      }
+
+      .history-dialog::backdrop {
+        background: #050711b8;
+        backdrop-filter: blur(4px);
+      }
+
+      .history-content {
+        display: flex;
+        max-height: min(90vh, 720px);
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px;
+      }
+
+      .history-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .history-heading h2 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .history-heading p {
+        margin: 6px 0 0;
+        color: var(--muted-color);
+        font-size: 13px;
+      }
+
+      .history-list {
+        display: flex;
+        min-height: 100px;
+        flex-direction: column;
+        gap: 8px;
+        overflow-y: auto;
+      }
+
+      .history-item {
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--assistant-message);
+      }
+
+      .history-question {
+        margin: 0;
+        overflow-wrap: anywhere;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .history-date {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted-color);
+        font-size: 11px;
+      }
+
+      .history-empty {
+        margin: auto;
+        color: var(--muted-color);
+        font-size: 14px;
+        text-align: center;
+      }
+
+      .history-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .history-clear {
+        border: 1px solid var(--border-color);
+        background: var(--panel-background);
+        color: var(--text-color);
+      }
+
       /* Janela modal para preencher e enviar uma avaliação sobre o protótipo. */
       .feedback-dialog {
         width: min(480px, calc(100vw - 32px));
@@ -1010,7 +1103,14 @@
                 </svg>
               </button>
               <div class="settings-menu" id="settings-menu" role="region" aria-label="Configurações" hidden>
-                <p class="settings-menu-title">Configurações</p>
+                                <p class="settings-menu-title">Configurações</p>
+                <button class="feedback-option" id="open-history" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4.5v4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span>Histórico de perguntas</span>
+                </button>
                 <button class="feedback-option" id="open-feedback" type="button">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H7l-3 2v-5.2A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1052,6 +1152,22 @@
         </footer>
       </section>
     </main>
+        <!-- Histórico local das últimas perguntas enviadas. -->
+    <dialog class="history-dialog" id="history-dialog" aria-labelledby="history-title">
+      <div class="history-content">
+        <div class="history-heading">
+          <div>
+            <h2 id="history-title">Histórico de perguntas</h2>
+            <p>As últimas 50 perguntas ficam salvas somente neste navegador.</p>
+          </div>
+          <button class="feedback-close" id="close-history" type="button" aria-label="Fechar histórico">×</button>
+        </div>
+        <div class="history-list" id="history-list" aria-live="polite"></div>
+        <div class="history-actions">
+          <button class="history-clear" id="clear-history" type="button">Limpar histórico</button>
+        </div>
+      </div>
+    </dialog>
     <!-- Formulário de feedback; nesta versão o envio é apenas demonstrativo. -->
     <dialog class="feedback-dialog" id="feedback-dialog" aria-labelledby="feedback-title">
       <div class="feedback-content">
@@ -1138,9 +1254,12 @@
       const themeIcon = document.querySelector("#theme-icon");
       const themeLabel = document.querySelector("#theme-label");
       const settingsTrigger = document.querySelector("#settings-trigger");
-      const settingsMenu = document.querySelector("#settings-menu");
-      const openFeedbackButton = document.querySelector("#open-feedback");
+            const settingsMenu = document.querySelector("#settings-menu");
+      const openHistoryButton = document.querySelector("#open-history");
+      const historyDialog = document.querySelector("#history-dialog");
+      const historyList = document.querySelector("#history-list");
       const feedbackDialog = document.querySelector("#feedback-dialog");
+      const openFeedbackButton = document.querySelector("#open-feedback");
       const feedbackForm = document.querySelector("#feedback-form");
       const feedbackSuccess = document.querySelector("#feedback-success");
 
@@ -1172,6 +1291,83 @@
         settingsTrigger.setAttribute("aria-expanded", String(!isOpen));
         settingsMenu.hidden = isOpen;
       });
+
+            const HISTORY_STORAGE_KEY = "yoda-question-history";
+
+      // Recupera e exibe o histórico guardado neste navegador.
+      function loadQuestionHistory() {
+        try {
+          const savedHistory = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || "[]");
+          return Array.isArray(savedHistory)
+            ? savedHistory.filter((item) => item && typeof item.question === "string" && typeof item.date === "string").slice(0, 50)
+            : [];
+        } catch (error) {
+          return [];
+        }
+      }
+
+      function renderQuestionHistory() {
+        const history = loadQuestionHistory();
+        historyList.replaceChildren();
+        document.querySelector("#clear-history").disabled = history.length === 0;
+
+        if (!history.length) {
+          const emptyMessage = document.createElement("p");
+          emptyMessage.className = "history-empty";
+          emptyMessage.textContent = "Ainda não há perguntas no histórico.";
+          historyList.append(emptyMessage);
+          return;
+        }
+
+        history.forEach((item) => {
+          const entry = document.createElement("article");
+          entry.className = "history-item";
+          const question = document.createElement("p");
+          question.className = "history-question";
+          question.textContent = item.question;
+          const date = document.createElement("time");
+          date.className = "history-date";
+          date.dateTime = item.date;
+          const parsedDate = new Date(item.date);
+          date.textContent = Number.isNaN(parsedDate.getTime())
+            ? "Data indisponível"
+            : parsedDate.toLocaleString("pt-BR");
+          entry.append(question, date);
+          historyList.append(entry);
+        });
+      }
+
+      function saveQuestionToHistory(question) {
+        const history = loadQuestionHistory();
+        history.unshift({ question, date: new Date().toISOString() });
+        try {
+          localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 50)));
+        } catch (error) {
+          // O envio da pergunta continua mesmo se o navegador bloquear o armazenamento.
+        }
+      }
+
+      openHistoryButton.addEventListener("click", () => {
+        settingsMenu.hidden = true;
+        settingsTrigger.setAttribute("aria-expanded", "false");
+        renderQuestionHistory();
+        historyDialog.showModal();
+        document.querySelector("#close-history").focus();
+      });
+
+      document.querySelector("#close-history").addEventListener("click", () => historyDialog.close());
+      document.querySelector("#clear-history").addEventListener("click", () => {
+        try {
+          localStorage.removeItem(HISTORY_STORAGE_KEY);
+        } catch (error) {
+          // Mantém a interface utilizável mesmo se o armazenamento não estiver disponível.
+        }
+        renderQuestionHistory();
+      });
+      historyDialog.addEventListener("click", (event) => {
+        if (event.target === historyDialog) historyDialog.close();
+      });
+      historyDialog.addEventListener("close", () => settingsTrigger.focus());
 
       // Abre o formulário escolhido dentro do menu de configurações.
       openFeedbackButton.addEventListener("click", () => {
@@ -1358,11 +1554,12 @@
         if (!message || sendButton.disabled) return;
         // Envia apenas as fontes marcadas na lista lateral.
         const selectedSources = sources.filter((source) => source.included);
-        if (!selectedSources.length) {
+                if (!selectedSources.length) {
           addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
           return;
         }
 
+        saveQuestionToHistory(message);
         // Mostra imediatamente a mensagem da pessoa na conversa.
         addMessage(message, "user");
         // Limpa o campo para permitir que a pessoa continue digitando.
