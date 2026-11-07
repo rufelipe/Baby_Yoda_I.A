@@ -2141,7 +2141,7 @@
           // Só gera voz quando o pedido explícito veio da pessoa.
           // A opção de leitura automática permanece como preferência adicional,
           // mas nunca faz o YODA falar uma resposta que não foi solicitada.
-          const shouldSpeak = data.speak_audio === true;
+          const shouldSpeak = data.speak_audio === true || voiceAutoCheckbox.checked;
           if (shouldSpeak) {
             const speakButton = document.createElement("button");
             speakButton.type = "button";
