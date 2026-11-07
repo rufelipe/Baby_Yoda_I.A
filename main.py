@@ -9,9 +9,13 @@ import urllib.request
 import zipfile
 from xml.etree import ElementTree
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# O frontend e a API são servidos pelo mesmo domínio no Render.
+# Isso elimina a necessidade de CORS e evita chamadas para localhost no navegador.
+app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
 
@@ -140,13 +144,16 @@ def call_gemini(message, conversation, documents):
     errors = []
 
     for model in MODELS:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}".format(
-            urllib.parse.quote(model, safe=""), urllib.parse.quote(API_KEY, safe="")
+        url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent".format(
+            urllib.parse.quote(model, safe="")
         )
         http_request = urllib.request.Request(
             url,
             data=encoded_payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": API_KEY,
+            },
             method="POST",
         )
 
@@ -183,19 +190,32 @@ def call_gemini(message, conversation, documents):
     raise RuntimeError("Nenhum modelo Gemini da lista funcionou. Tentativas: {}".format(" | ".join(errors)))
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    return response
+@app.route("/", methods=["GET"])
+def home():
+    """Entrega a interface principal."""
+    return send_from_directory(BASE_DIR, "index.html")
 
 
-@app.route("/perguntar", methods=["POST", "OPTIONS"])
+@app.route("/logo-yoda.png", methods=["GET"])
+def logo():
+    """Entrega a logo usada no cabeçalho."""
+    return send_from_directory(BASE_DIR, "logo-yoda.png")
+
+
+@app.route("/marca-agua.png", methods=["GET"])
+def watermark():
+    """Entrega a marca d'água usada no fundo do chat."""
+    return send_from_directory(BASE_DIR, "marca-agua.png")
+
+
+@app.route("/healthz", methods=["GET"])
+def health_check():
+    """Endpoint simples usado pelo health check do Render."""
+    return jsonify({"status": "ok"})
+
+
+@app.route("/perguntar", methods=["POST"])
 def perguntar():
-    if request.method == "OPTIONS":
-        return ("", 204)
-
     if not ACCESS_PASSWORD:
         return jsonify({"error": "O acesso ainda não foi configurado pelo administrador."}), 503
     supplied_password = request.form.get("access_password", "")

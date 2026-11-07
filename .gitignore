@@ -1,0 +1,29 @@
+# Segredos e configurações locais
+.env
+.env.*
+!.env.example
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Cópias de segurança criadas durante a preparação
+*.render-backup
+
+# Ferramentas e logs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# Editor / sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

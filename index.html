@@ -1319,8 +1319,8 @@
       </div>
     </dialog>
     <script>
-      // Endereço da API local: substitua pela URL e rota informadas pelo desenvolvedor do backend.
-      const API_URL = "http://localhost:5000/perguntar";
+      // Rota relativa: funciona localmente e no Render porque a página e a API usam o mesmo domínio.
+      const API_URL = "/perguntar";
       // O backend deve receber multipart/form-data e extrair as fontes dos documentos.
       // Para garantir respostas somente com base nos arquivos, essa regra também deve ser aplicada no backend.
       const REQUEST_FIELD = "message";
@@ -1761,7 +1761,7 @@
           pending.classList.add("error");
           pending.textContent =
             `Não foi possível falar com a IA. ${error.message} ` +
-            "Verifique se o backend está ligado, aceita multipart/form-data com os campos message e files, e permite CORS.";
+            "Verifique se o serviço está ativo, se a senha de acesso está correta e se os documentos são PDF, DOC ou DOCX.";
         } finally {
           // Reativa o botão mesmo se a comunicação com o backend falhar.
           sendButton.disabled = false;

@@ -1,0 +1,114 @@
+# Baby Yoda I.A. — preparação para Render
+
+Este pacote contém os arquivos atualizados para hospedar o frontend e o backend Flask no mesmo serviço.
+
+## Arquivos deste pacote
+
+- `main.py`: entrega a página, os dois arquivos de imagem e a API.
+- `index.html`: usa a rota relativa `/perguntar` em vez de `localhost`.
+- `requirements.txt`: dependências Python.
+- `.gitignore`: ignora `.env`, ambientes virtuais e arquivos temporários.
+- `.env.example`: exemplo das variáveis locais.
+- `render.yaml`: Blueprint de um Web Service no Render.
+
+## 1. Aplicar ao seu projeto
+
+Copie estes arquivos para a pasta raiz do projeto e substitua `main.py` e `index.html`.
+
+Mantenha no projeto os demais arquivos e imagens existentes, especialmente:
+- `logo-yoda.png`
+- `marca-agua.png`
+
+Não copie a pasta `venv` para o GitHub/Render. O arquivo `ingest.py` pode continuar no projeto; o `main.py` atual não o importa para servir o site.
+
+## 2. Configurar o ambiente local (Windows)
+
+Ative seu ambiente virtual e instale as dependências:
+
+```bat
+py -m pip install -r requirements.txt
+```
+
+Crie ou edite o `.env` local (não compartilhe esse arquivo) e configure:
+
+```env
+GEMINI_API_KEY=sua_chave_da_gemini
+SITE_PASSWORD=sua_senha_de_acesso_ao_site
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+`SITE_PASSWORD` é necessária: o backend retorna HTTP 503 se ela não estiver configurada.
+
+Inicie a aplicação:
+
+```bat
+py main.py
+```
+
+Abra `http://127.0.0.1:5000` no navegador. Não abra `index.html` diretamente com `file:///`, pois a interface agora chama a API pela rota relativa `/perguntar`.
+
+Teste também `http://127.0.0.1:5000/healthz`; deve retornar `{"status":"ok"}`.
+
+## 3. Proteger o `.env` no Git
+
+O `.gitignore` impede novos arquivos `.env` de serem adicionados, mas não remove um `.env` que já esteja versionado.
+
+Como o `.env` aparece como modificado no seu VS Code, execute na raiz do repositório:
+
+```bash
+git rm --cached .env
+```
+
+Esse comando remove o `.env` do controle do Git, mas mantém o arquivo no seu computador. Se o Git informar que o caminho não está no índice, o arquivo já não está versionado.
+
+Depois confira:
+
+```bash
+git status
+```
+
+Não faça `git add .env`. Se uma chave real já foi enviada em algum commit anterior, revogue-a e crie uma nova no provedor Gemini.
+
+## 4. Enviar ao GitHub
+
+Confira as mudanças antes de confirmar:
+
+```bash
+git diff
+git status
+```
+
+Adicione somente os arquivos de aplicação/configuração (não inclua `.env` nem `venv`):
+
+```bash
+git add main.py index.html requirements.txt .gitignore .env.example render.yaml
+git commit -m "Preparar Baby Yoda IA para Render"
+git push origin main
+```
+
+## 5. Criar o serviço no Render
+
+Você pode criar o serviço a partir do `render.yaml` como Blueprint, ou criar um Web Service manualmente.
+
+Configuração manual:
+
+- Runtime: Python
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
+- Health Check Path: `/healthz`
+
+Cadastre no painel do Render estas Environment Variables:
+
+- `GEMINI_API_KEY`: sua chave da API Gemini
+- `SITE_PASSWORD`: a senha que os usuários digitarão no primeiro envio
+- `GEMINI_MODEL`: `gemini-2.5-flash`
+
+Não cadastre nem envie o arquivo `.env`.
+
+## Observações
+
+- O site e a API passam a compartilhar o mesmo domínio. O CORS aberto foi removido porque não é necessário para essa arquitetura.
+- A chave Gemini fica no backend e é enviada à API no cabeçalho `x-goog-api-key`, em vez de aparecer na URL da chamada.
+- A interface continua enviando os campos `message`, `files`, `conversa` e `access_password`; a resposta continua sendo lida de `response`.
+- O backend mantém os limites existentes: até 10 documentos e 25 MB por requisição.
+- O serviço foi configurado no plano gratuito do Render. Instâncias gratuitas podem entrar em repouso após períodos sem tráfego; isso pode causar demora na primeira visita.
