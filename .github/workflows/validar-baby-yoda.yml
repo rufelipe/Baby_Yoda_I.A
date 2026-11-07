@@ -1,0 +1,81 @@
+name: Validar Baby Yoda IA
+
+on:
+  push:
+    branches:
+      - preparar-render
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias de validacao
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pyyaml
+
+      - name: Verificar sintaxe Python
+        run: python -m compileall -q main.py ingest.py
+
+      - name: Verificar sintaxe JavaScript
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.S | re.I)
+          assert scripts, "Nenhum script encontrado no index.html"
+          Path("/tmp/yoda-inline.js").write_text("\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/yoda-inline.js
+
+      - name: Validar Render e comportamento basico
+        run: |
+          python - <<'PY'
+          import io
+          import yaml
+          from werkzeug.datastructures import FileStorage
+          import main
+
+          with open("render.yaml", encoding="utf-8") as file:
+              config = yaml.safe_load(file)
+
+          service = config["services"][0]
+          assert service["type"] == "web"
+          assert service["healthCheckPath"] == "/healthz"
+          env = {item["key"]: item for item in service["envVars"]}
+          text_models = env["GEMINI_MODELS"]["value"].split(",")
+          audio_models = env["GEMINI_AUDIO_MODELS"]["value"].split(",")
+          assert len(text_models) >= 6
+          assert len(audio_models) >= 5
+          assert "gemini-3.1-flash-lite" not in audio_models
+
+          client = main.app.test_client()
+          response = client.get("/healthz")
+          assert response.status_code == 200
+          assert response.get_json() == {"status": "ok"}
+
+          sample = FileStorage(stream=io.BytesIO(b"fake-mp3"), filename="sample.mp3")
+          audio_part, size = main.prepare_audio(sample)
+          assert size == 8
+          assert audio_part["inlineData"]["mimeType"] == "audio/mp3"
+          assert audio_part["inlineData"]["data"]
+
+          print("Sintaxe, YAML, Flask health check e preparacao de audio validados.")
+          PY
