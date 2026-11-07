@@ -509,7 +509,17 @@ def call_gemini(message, conversation, documents, audio_parts=None):
     prompt = "Pergunta/pedido atual:\n{}".format(message)
     if conversation:
         prompt += "\n\nContexto recente da conversa (use apenas para continuidade):\n{}".format(conversation)
-    prompt += "\n\nAnalise os documentos e/ou áudios anexados e atenda ao pedido como professora."
+    prompt += (
+        "\n\nAnalise os documentos e/ou áudios anexados e atenda ao pedido como professora. "
+        "A resposta deve ser escrita normalmente e não deve ser falada automaticamente."
+    )
+    prompt += (
+        "\n\nREGRA DE ÁUDIO: determine se a pessoa pediu explicitamente que a resposta seja "
+        "falada/em áudio. Isso vale tanto para uma instrução escrita quanto para uma instrução "
+        "dita no áudio anexado. Exemplos de pedido explícito: 'responda em áudio', 'quero ouvir', "
+        "'me responda falando', 'leia para mim'. Se não houver pedido explícito, marque speak_audio "
+        "como false. Enviar uma pergunta pelo microfone, por si só, NÃO é pedido de resposta em áudio."
+    )
     if audio_parts:
         prompt += (
             "\n\nHá áudio(s) anexado(s). Escute a fala, identifique a pergunta ou instrução "
@@ -522,7 +532,19 @@ def call_gemini(message, conversation, documents, audio_parts=None):
     payload = {
         "systemInstruction": {"parts": [{"text": TEACHER_INSTRUCTIONS}]},
         "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096},
+        "generationConfig": {
+            "temperature": 0.4,
+            "maxOutputTokens": 4096,
+            "responseMimeType": "application/json",
+            "responseJsonSchema": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string"},
+                    "speak_audio": {"type": "boolean"},
+                },
+                "required": ["answer", "speak_audio"],
+            },
+        },
     }
     encoded_payload = json.dumps(payload).encode("utf-8")
 
@@ -634,15 +656,31 @@ def call_gemini(message, conversation, documents, audio_parts=None):
             response_parts = (
                 candidates[0].get("content", {}).get("parts", []) if candidates else []
             )
-            answer = "\n".join(
+            raw_answer = "\n".join(
                 part.get("text", "")
                 for part in response_parts
                 if isinstance(part.get("text"), str)
             ).strip()
 
-            if answer:
-                print("[Gemini fallback] Resposta obtida com {}.".format(model), flush=True)
-                return answer
+            if raw_answer:
+                answer = raw_answer
+                model_requested_audio = False
+                try:
+                    structured = json.loads(raw_answer)
+                    if isinstance(structured, dict) and isinstance(structured.get("answer"), str):
+                        answer = structured["answer"].strip()
+                        model_requested_audio = structured.get("speak_audio") is True
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    # Compatibilidade: se algum modelo ignorar o formato JSON,
+                    # ainda entregamos a resposta textual sem ativar voz automaticamente.
+                    model_requested_audio = False
+
+                if answer:
+                    print("[Gemini fallback] Resposta obtida com {}.".format(model), flush=True)
+                    return {
+                        "answer": answer,
+                        "speak_audio": model_requested_audio,
+                    }
 
             block_reason = result.get("promptFeedback", {}).get("blockReason")
             if block_reason:
@@ -744,15 +782,19 @@ def perguntar():
                     "deve ficar abaixo de 13 MB. Comprima ou divida o áudio e tente novamente."
                 )
 
-        answer = call_gemini(
+        result = call_gemini(
             message,
             (request.form.get("conversa") or "")[:6000],
             documents,
             audio_parts,
         )
+        answer = result["answer"]
+        # Pedido explícito escrito tem prioridade. Para áudio, o próprio Gemini
+        # identifica se a instrução falada pediu uma resposta em voz.
+        speak_audio = requested_audio or result.get("speak_audio", False)
         return jsonify({
             "response": answer,
-            "speak_audio": requested_audio,
+            "speak_audio": speak_audio,
         })
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
