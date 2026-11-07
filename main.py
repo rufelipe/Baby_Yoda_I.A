@@ -297,12 +297,16 @@ VOICE_PROFILES = {
     "calma": {"voice": "pt-BR-YaraNeural", "rate": "-10%", "pitch": "-2Hz"},
 }
 
+ACCENT_ALIASES = {
+    "brasil": "brasil", "portugal": "portugal",
+    "carioca": "carioca", "rio": "carioca",
+    "rio de janeiro": "carioca", "riodejaneiro": "carioca",
+    "mineiro": "mineiro", "baiano": "baiano", "bahia": "baiano",
+}
+
 ACCENT_LOCALES = {
-    "brasil": "pt-BR",
-    "portugal": "pt-PT",
-    "carioca": "pt-BR",
-    "mineiro": "pt-BR",
-    "baiano": "pt-BR",
+    "brasil": "pt-BR", "portugal": "pt-PT",
+    "carioca": "pt-BR", "mineiro": "pt-BR", "baiano": "pt-BR",
 }
 
 PORTUGAL_VOICE_FALLBACKS = {
@@ -316,22 +320,42 @@ PORTUGAL_VOICE_FALLBACKS = {
 }
 
 
+def apply_regional_pronunciation(text, accent):
+    """Aplica ajustes fonéticos leves somente ao áudio, sem alterar o texto do chat."""
+    if accent == "carioca":
+        # Em posição final de sílaba, o S carioca frequentemente soa como "sh".
+        text = re.sub(
+            r"s(?=(?:\s+[bcdfghjklmnpqrstvwxyz]|[,.;:!?]|$))",
+            "sh", text, flags=re.IGNORECASE
+        )
+    elif accent == "baiano":
+        # Preserva as palavras e adota uma cadência mais relaxada, sem bordões artificiais.
+        text = re.sub(r"\s*,\s*", ", ", text)
+    return text
+
+
 def synthesize_voice(text, profile_name="calma", accent="brasil"):
-    """Gera MP3 com uma voz neural gratuita via Edge TTS, sem chave de API."""
+    """Gera MP3 com voz neural gratuita via Edge TTS, sem chave de API."""
+    accent = ACCENT_ALIASES.get(str(accent or "brasil").strip().casefold(), "brasil")
     profile = VOICE_PROFILES.get(profile_name, VOICE_PROFILES["calma"])
     locale = ACCENT_LOCALES.get(accent, "pt-BR")
     voice = profile["voice"] if locale == "pt-BR" else PORTUGAL_VOICE_FALLBACKS.get(profile_name, "pt-PT-RaquelNeural")
     clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
     if not clean_text:
         raise ValueError("Não há texto para sintetizar.")
-    clean_text = clean_text[:12000]
+    clean_text = apply_regional_pronunciation(clean_text[:12000], accent)
+    rate = profile["rate"]
+    pitch = profile["pitch"]
+    if accent == "baiano":
+        rate = "-4%" if rate == "0%" else rate
+        pitch = "+2Hz" if pitch == "0Hz" else pitch
 
     async def generate():
         communicator = edge_tts.Communicate(
             clean_text,
             voice,
-            rate=profile["rate"],
-            pitch=profile["pitch"],
+            rate=rate,
+            pitch=pitch,
             volume="+0%",
         )
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
@@ -361,7 +385,8 @@ def sintetizar_voz():
         return jsonify({"error": "Senha de acesso incorreta."}), 401
     text = prepare_spoken_text(data.get("text", ""))
     profile = str(data.get("profile", "calma")).strip().lower()
-    accent = str(data.get("accent", "brasil")).strip().lower()
+    accent_input = str(data.get("accent", "brasil")).strip().casefold()
+    accent = ACCENT_ALIASES.get(accent_input)
     if profile not in VOICE_PROFILES:
         return jsonify({"error": "Perfil de voz não reconhecido."}), 400
     if accent not in ACCENT_LOCALES:
@@ -438,15 +463,22 @@ def extract_legacy_doc_text(file_bytes):
 
 
 def prepare_spoken_text(text):
-    """Limpa Markdown e URLs para que a voz fale como uma resposta natural."""
-    cleaned = re.sub(r"https?://\S+", "", str(text or ""))
-    cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+    """Remove Markdown e símbolos que não devem ser pronunciados pelo TTS."""
+    cleaned = str(text or "")
+    cleaned = re.sub(r"\x60{3}.*?\x60{3}", " ", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"\x60([^\x60]+)\x60", r"\1", cleaned)
+    cleaned = re.sub(r"!?\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+    cleaned = re.sub(r"https?://\S+", "", cleaned)
     cleaned = re.sub(r"(?m)^\s*#{1,6}\s+", "", cleaned)
-    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
-    cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+    cleaned = re.sub(r"(?m)^\s*>+\s?", "", cleaned)
+    cleaned = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", cleaned)
+    cleaned = re.sub(r"_{1,2}([^_]+)_{1,2}", r"\1", cleaned)
+    cleaned = re.sub(r"~~([^~]+)~~", r"\1", cleaned)
     cleaned = re.sub(r"(?m)^\s*[-*+]\s+", "", cleaned)
     cleaned = re.sub(r"(?m)^\s*\d+[.)]\s+", "", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(r"[*_~#|]", " ", cleaned)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip(" .,:;\t\n")
 
 
 def prepare_document(upload):
