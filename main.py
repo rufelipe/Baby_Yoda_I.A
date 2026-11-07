@@ -120,7 +120,10 @@ def prepare_document(upload):
             "Formato não aceito para \"{}\". Envie arquivos PDF, DOC ou DOCX.".format(filename)
         )
 
-    return {"text": "\n\n[Conteúdo do arquivo: {}]\n{}".def call_gemini(message, conversation, documents):
+    return {"text": "\n\n[Conteúdo do arquivo: {}]\n{}".format(filename, text)}
+
+
+def call_gemini(message, conversation, documents):
     if not API_KEY:
         raise RuntimeError(
             "A chave da API não está configurada. Defina a variável de ambiente GEMINI_API_KEY no backend."
