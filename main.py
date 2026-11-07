@@ -557,7 +557,7 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
     )
     if conversation_mode:
         prompt += (
-            "\n\\nESTILO DE CONVERSAÇÃO ATIVO: responda como em um bate-papo ao vivo. "
+            "\n\nESTILO DE CONVERSAÇÃO ATIVO: responda como em um bate-papo ao vivo. "
             "Seja breve e espontâneo, sem títulos, listas, asteriscos ou leitura de formatação. "
             "Não narre o que está fazendo. Dê espaço para a pessoa continuar falando."
         )
