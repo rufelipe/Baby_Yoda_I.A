@@ -85,7 +85,7 @@ MAX_AUDIO_REQUEST_MEDIA_BYTES = 13 * 1024 * 1024
 # A chave anônima pública não exige cadastro nem pagamento; a fila pode ser demorada.
 AI_HORDE_BASE_URL = "https://aihorde.net/api/v2"
 AI_HORDE_ANONYMOUS_KEY = "0000000000"
-AI_HORDE_CLIENT_AGENT = "Baby-Yoda-IA:1.0"
+AI_HORDE_CLIENT_AGENT = "Baby-Yoda-IA:1.0:github.com/rufelipe/Baby_Yoda_I.A"
 
 IMAGE_DIMENSIONS = {
     "1:1": (512, 512),
