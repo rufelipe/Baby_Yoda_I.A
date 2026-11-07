@@ -528,7 +528,7 @@
         z-index: 5;
         top: calc(100% + 10px);
         right: 0;
-        width: 220px;
+        width: min(310px, calc(100vw - 36px));
         padding: 14px;
         border: 1px solid var(--border-color);
         border-radius: 12px;
@@ -574,6 +574,64 @@
         height: 18px;
         flex: 0 0 auto;
         color: var(--brand-color);
+      }
+
+      .voice-settings {
+        display: grid;
+        gap: 10px;
+        padding: 10px 4px 4px;
+        border-top: 1px solid var(--border-color);
+      }
+
+      .voice-settings[hidden] { display: none; }
+
+      .voice-settings label {
+        display: grid;
+        gap: 5px;
+        color: var(--text-color);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .voice-settings select,
+      .voice-settings input[type="range"] {
+        width: 100%;
+        min-height: 36px;
+        accent-color: var(--brand-color);
+      }
+
+      .voice-settings select {
+        padding: 7px 9px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--panel-background);
+        color: var(--text-color);
+        font: inherit;
+        font-size: 12px;
+      }
+
+      .voice-toggle-row {
+        display: flex !important;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 8px !important;
+      }
+
+      .voice-preview {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid var(--border-color);
+        border-radius: 9px;
+        background: var(--assistant-message);
+        color: var(--text-color);
+        font-size: 12px;
+      }
+
+      .voice-help {
+        margin: 0;
+        color: var(--muted-color);
+        font-size: 11px;
+        line-height: 1.4;
       }
 
       /* Janela para solicitar a senha de acesso dentro da própria página. */
@@ -1218,6 +1276,35 @@
               </button>
               <div class="settings-menu" id="settings-menu" role="region" aria-label="Configurações" hidden>
                                 <p class="settings-menu-title">Configurações</p>
+                <button class="feedback-option" id="toggle-voice-settings" type="button" aria-expanded="false" aria-controls="voice-settings">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v3m-4 0h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <span>Voz</span>
+                </button>
+                <section class="voice-settings" id="voice-settings" hidden aria-label="Configurações de voz">
+                  <label for="voice-style">Estilo de voz
+                    <select id="voice-style">
+                      <option value="hero">Herói de anime — energético</option>
+                      <option value="ninja">Ninja — jovem e vibrante</option>
+                      <option value="swordsman">Espadachim — grave e firme</option>
+                      <option value="pirate">Aventureiro — alegre e expressivo</option>
+                      <option value="comic">Detetive divertido — caricatural</option>
+                      <option value="narrator">Narrador épico — profundo</option>
+                      <option value="natural">Natural — equilibrado</option>
+                    </select>
+                  </label>
+                  <label for="voice-native">Voz disponível em português
+                    <select id="voice-native"><option value="">Voz padrão do dispositivo</option></select>
+                  </label>
+                  <label for="voice-speed">Velocidade: <output id="voice-speed-value">1,0x</output>
+                    <input id="voice-speed" type="range" min="0.7" max="1.4" step="0.1" value="1">
+                  </label>
+                  <label class="voice-toggle-row"><input id="voice-auto" type="checkbox" checked> Ler respostas automaticamente</label>
+                  <button class="voice-preview" id="voice-preview" type="button">▶ Testar voz selecionada</button>
+                  <p class="voice-help">Os estilos ajustam entonação e ritmo usando as vozes instaladas no navegador. Não são cópias das vozes oficiais dos personagens.</p>
+                </section>
                 <button class="feedback-option" id="open-history" type="button">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4.5v4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1435,6 +1522,15 @@
       const settingsTrigger = document.querySelector("#settings-trigger");
             const settingsMenu = document.querySelector("#settings-menu");
       const openHistoryButton = document.querySelector("#open-history");
+      const toggleVoiceSettings = document.querySelector("#toggle-voice-settings");
+      const voiceSettings = document.querySelector("#voice-settings");
+      const voiceStyleSelect = document.querySelector("#voice-style");
+      const voiceNativeSelect = document.querySelector("#voice-native");
+      const voiceSpeedInput = document.querySelector("#voice-speed");
+      const voiceSpeedValue = document.querySelector("#voice-speed-value");
+      const voiceAutoCheckbox = document.querySelector("#voice-auto");
+      const voicePreviewButton = document.querySelector("#voice-preview");
+      const VOICE_SETTINGS_KEY = "baby-yoda-voice-settings";
       const historyDialog = document.querySelector("#history-dialog");
       const historyList = document.querySelector("#history-list");
       const feedbackDialog = document.querySelector("#feedback-dialog");
@@ -1462,6 +1558,88 @@
       themeToggle.addEventListener("click", () => {
         const currentTheme = document.documentElement.dataset.theme || "light";
         setTheme(currentTheme === "light" ? "dark" : "light");
+      });
+
+      const VOICE_PRESETS = {
+        hero: { pitch: 1.18, rate: 1.04 },
+        ninja: { pitch: 1.28, rate: 1.12 },
+        swordsman: { pitch: 0.78, rate: 0.92 },
+        pirate: { pitch: 1.12, rate: 1.08 },
+        comic: { pitch: 1.38, rate: 1.02 },
+        narrator: { pitch: 0.72, rate: 0.88 },
+        natural: { pitch: 1, rate: 1 }
+      };
+
+      function loadVoiceSettings() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(VOICE_SETTINGS_KEY) || "{}");
+          if (saved && typeof saved === "object") {
+            if (VOICE_PRESETS[saved.style]) voiceStyleSelect.value = saved.style;
+            if (typeof saved.speed === "number") voiceSpeedInput.value = String(Math.min(1.4, Math.max(0.7, saved.speed)));
+            if (typeof saved.auto === "boolean") voiceAutoCheckbox.checked = saved.auto;
+            if (typeof saved.voiceURI === "string") voiceNativeSelect.dataset.preferredVoice = saved.voiceURI;
+          }
+        } catch (error) {
+          // Mantém as opções padrão se o armazenamento local estiver indisponível.
+        }
+        voiceSpeedValue.value = Number(voiceSpeedInput.value).toFixed(1).replace(".", ",") + "x";
+      }
+
+      function saveVoiceSettings() {
+        const settings = {
+          style: voiceStyleSelect.value,
+          speed: Number(voiceSpeedInput.value),
+          auto: voiceAutoCheckbox.checked,
+          voiceURI: voiceNativeSelect.value
+        };
+        try { localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings)); } catch (error) {}
+      }
+
+      function populatePortugueseVoices() {
+        if (!("speechSynthesis" in window)) return;
+        const previous = voiceNativeSelect.dataset.preferredVoice || voiceNativeSelect.value;
+        const voices = window.speechSynthesis.getVoices().filter((voice) => /^pt(-|_)/i.test(voice.lang));
+        voiceNativeSelect.replaceChildren(new Option("Voz padrão do dispositivo", ""));
+        voices.forEach((voice) => voiceNativeSelect.add(new Option(voice.name + " (" + voice.lang + ")", voice.voiceURI)));
+        if (voices.some((voice) => voice.voiceURI === previous)) voiceNativeSelect.value = previous;
+      }
+
+      function speakAnswer(text) {
+        if (!("speechSynthesis" in window)) return false;
+        const utterance = new SpeechSynthesisUtterance(text);
+        const preset = VOICE_PRESETS[voiceStyleSelect.value] || VOICE_PRESETS.natural;
+        utterance.lang = "pt-BR";
+        utterance.rate = Math.min(1.8, Math.max(0.5, preset.rate * Number(voiceSpeedInput.value)));
+        utterance.pitch = preset.pitch;
+        const selectedVoice = window.speechSynthesis.getVoices().find((voice) => voice.voiceURI === voiceNativeSelect.value);
+        if (selectedVoice) utterance.voice = selectedVoice;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+        return true;
+      }
+
+      loadVoiceSettings();
+      populatePortugueseVoices();
+      if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", populatePortugueseVoices);
+      [voiceStyleSelect, voiceNativeSelect, voiceSpeedInput, voiceAutoCheckbox].forEach((control) => {
+        control.addEventListener("change", () => {
+          voiceNativeSelect.dataset.preferredVoice = voiceNativeSelect.value;
+          voiceSpeedValue.value = Number(voiceSpeedInput.value).toFixed(1).replace(".", ",") + "x";
+          saveVoiceSettings();
+        });
+      });
+      voiceSpeedInput.addEventListener("input", () => {
+        voiceSpeedValue.value = Number(voiceSpeedInput.value).toFixed(1).replace(".", ",") + "x";
+        saveVoiceSettings();
+      });
+      toggleVoiceSettings.addEventListener("click", () => {
+        voiceSettings.hidden = !voiceSettings.hidden;
+        toggleVoiceSettings.setAttribute("aria-expanded", String(!voiceSettings.hidden));
+      });
+      voicePreviewButton.addEventListener("click", () => {
+        if (!speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.")) {
+          voicePreviewButton.textContent = "Áudio não suportado neste navegador";
+        }
       });
 
       // Abre ou fecha o menu de configurações ao clicar na engrenagem.
@@ -1915,21 +2093,14 @@
               return;
             }
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(answer);
-            utterance.lang = "pt-BR";
-            utterance.rate = 1;
-            window.speechSynthesis.speak(utterance);
+            speakAnswer(answer);
             speakButton.textContent = "🔊 Reproduzir novamente";
           });
           pending.append(speakButton);
 
           // Quando a pergunta veio do microfone, inicia a leitura da resposta automaticamente.
-          if (questionWasRecorded && "speechSynthesis" in window) {
-            const spokenAnswer = new SpeechSynthesisUtterance(answer);
-            spokenAnswer.lang = "pt-BR";
-            spokenAnswer.rate = 1;
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(spokenAnswer);
+          if (questionWasRecorded && voiceAutoCheckbox.checked && "speechSynthesis" in window) {
+            speakAnswer(answer);
           }
         } catch (error) {
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
