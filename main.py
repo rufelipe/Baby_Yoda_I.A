@@ -140,8 +140,6 @@ def prepare_document(upload):
     }
     encoded_payload = json.dumps(payload).encode("utf-8")
 
-    # Repete erros temporários com espera exponencial.
-    # Erros de autenticação não melhoram ao trocar de modelo.
     retryable_statuses = {408, 429, 500, 502, 503, 504}
     authentication_statuses = {401, 403}
 
@@ -226,8 +224,6 @@ def prepare_document(upload):
                         time.sleep(delay)
                         continue
 
-                # Se este modelo estiver indisponível ou incompatível,
-                # encerra as tentativas dele e avança para o próximo.
                 break
 
             except (urllib.error.URLError, TimeoutError, OSError) as error:
@@ -279,7 +275,6 @@ def prepare_document(upload):
     raise RuntimeError(
         "Nenhum modelo Gemini da lista funcionou. Tentativas: {}".format(" | ".join(errors))
     )
-rmat(" | ".join(errors)))
 
 
 @app.route("/", methods=["GET"])
