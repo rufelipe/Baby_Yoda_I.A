@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import random
+import sqlite3
 import re
 import urllib.error
 import urllib.parse
@@ -81,6 +82,124 @@ AUDIO_MODELS = parse_model_list(
 )
 MAX_DOCUMENT_TEXT = 80000
 MAX_AUDIO_REQUEST_MEDIA_BYTES = 13 * 1024 * 1024
+
+# Geração de imagens: limite diário por aplicação, configurável no Render.
+IMAGE_DAILY_LIMIT = max(1, min(int(os.environ.get("IMAGE_DAILY_LIMIT", "100")), 1000))
+IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-lite-image").strip()
+IMAGE_FALLBACK_MODEL = os.environ.get("GEMINI_IMAGE_FALLBACK_MODEL", "gemini-3.1-flash-image").strip()
+IMAGE_USAGE_DB = os.environ.get("IMAGE_USAGE_DB", "/tmp/baby_yoda_image_usage.sqlite3")
+
+
+def image_usage_connection():
+    directory = os.path.dirname(IMAGE_USAGE_DB)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    connection = sqlite3.connect(IMAGE_USAGE_DB, timeout=15)
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS image_usage (usage_date TEXT PRIMARY KEY, count INTEGER NOT NULL)"
+    )
+    return connection
+
+
+def get_image_usage():
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    with image_usage_connection() as connection:
+        row = connection.execute(
+            "SELECT count FROM image_usage WHERE usage_date = ?", (today,)
+        ).fetchone()
+    used = int(row[0]) if row else 0
+    return {"used": used, "limit": IMAGE_DAILY_LIMIT, "remaining": max(0, IMAGE_DAILY_LIMIT - used)}
+
+
+def reserve_image_slot():
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    with image_usage_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT count FROM image_usage WHERE usage_date = ?", (today,)
+        ).fetchone()
+        used = int(row[0]) if row else 0
+        if used >= IMAGE_DAILY_LIMIT:
+            connection.rollback()
+            return False, used
+        connection.execute(
+            "INSERT INTO image_usage (usage_date, count) VALUES (?, 1) "
+            "ON CONFLICT(usage_date) DO UPDATE SET count = count + 1",
+            (today,),
+        )
+        connection.commit()
+        return True, used + 1
+
+
+def release_image_slot():
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    with image_usage_connection() as connection:
+        connection.execute(
+            "UPDATE image_usage SET count = MAX(0, count - 1) WHERE usage_date = ?",
+            (today,),
+        )
+
+
+def request_gemini_image(prompt, aspect_ratio):
+    if not API_KEY:
+        raise RuntimeError("A chave GEMINI_API_KEY não está configurada no Render.")
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+            "imageConfig": {"aspectRatio": aspect_ratio, "imageSize": "1K"},
+        },
+    }
+    encoded = json.dumps(payload).encode("utf-8")
+    errors = []
+    models = list(dict.fromkeys([IMAGE_MODEL, IMAGE_FALLBACK_MODEL]))
+    for model in models:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent".format(
+            urllib.parse.quote(model, safe="")
+        )
+        http_request = urllib.request.Request(
+            url,
+            data=encoded,
+            headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(http_request, timeout=150) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            candidates = result.get("candidates") or []
+            parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+            image_part = next(
+                (part.get("inlineData") or part.get("inline_data") for part in parts
+                 if part.get("inlineData") or part.get("inline_data")),
+                None,
+            )
+            if image_part and image_part.get("data"):
+                description = "\\n".join(
+                    part.get("text", "") for part in parts if isinstance(part.get("text"), str)
+                ).strip()
+                mime_type = image_part.get("mimeType") or image_part.get("mime_type") or "image/png"
+                return {
+                    "image": "data:{};base64,{}".format(mime_type, image_part["data"]),
+                    "description": description,
+                    "model": model,
+                }
+            errors.append("{} não retornou uma imagem.".format(model))
+        except urllib.error.HTTPError as error:
+            details = error.read().decode("utf-8", errors="replace")
+            try:
+                message = json.loads(details).get("error", {}).get("message", details)
+            except ValueError:
+                message = details
+            errors.append("{} (HTTP {}): {}".format(model, error.code, message))
+            if error.code in (401, 403):
+                raise RuntimeError("A API Gemini recusou a chave ou as permissões. Confira GEMINI_API_KEY.")
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+            errors.append("{}: {}".format(model, error))
+    raise RuntimeError("Não foi possível gerar a imagem. " + " | ".join(errors))
+
+
+def validate_access_password(supplied_password):
+    return bool(ACCESS_PASSWORD) and hmac.compare_digest(supplied_password or "", ACCESS_PASSWORD)
 AUDIO_MIME_TYPES = {
     ".wav": "audio/wav",
     ".mp3": "audio/mp3",
@@ -432,6 +551,58 @@ def perguntar():
         return jsonify({"error": str(error)}), 400
     except RuntimeError as error:
         return jsonify({"error": str(error)}), 502
+
+
+@app.route("/imagem/status", methods=["POST"])
+def image_status():
+    data = request.get_json(silent=True) or {}
+    if not validate_access_password(data.get("access_password", "")):
+        return jsonify({"error": "Senha de acesso incorreta."}), 401
+    return jsonify(get_image_usage())
+
+
+@app.route("/gerar-imagem", methods=["POST"])
+def gerar_imagem():
+    data = request.get_json(silent=True) or {}
+    if not validate_access_password(data.get("access_password", "")):
+        return jsonify({"error": "Senha de acesso incorreta."}), 401
+
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "Descreva a imagem que deseja criar."}), 400
+    if len(prompt) > 4000:
+        return jsonify({"error": "A descrição deve ter no máximo 4.000 caracteres."}), 400
+
+    aspect_ratio = data.get("aspect_ratio", "1:1")
+    allowed_ratios = {"1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}
+    if aspect_ratio not in allowed_ratios:
+        return jsonify({"error": "Proporção de imagem inválida."}), 400
+
+    reserved, used = reserve_image_slot()
+    if not reserved:
+        return jsonify({
+            "error": "O limite diário de {} imagens foi atingido. Tente novamente após a meia-noite UTC.".format(IMAGE_DAILY_LIMIT),
+            "used": used,
+            "limit": IMAGE_DAILY_LIMIT,
+            "remaining": 0,
+        }), 429
+
+    try:
+        result = request_gemini_image(prompt, aspect_ratio)
+        usage = get_image_usage()
+        return jsonify({
+            "image": result["image"],
+            "description": result["description"],
+            "model": result["model"],
+            **usage,
+        })
+    except RuntimeError as error:
+        release_image_slot()
+        return jsonify({"error": str(error), **get_image_usage()}), 502
+    except Exception:
+        release_image_slot()
+        app.logger.exception("Falha inesperada na geração de imagem.")
+        return jsonify({"error": "Ocorreu um erro inesperado ao gerar a imagem. Tente novamente."}), 500
 
 
 @app.errorhandler(413)
