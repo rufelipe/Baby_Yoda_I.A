@@ -1112,8 +1112,14 @@
         animation: voice-pulse 1.2s ease-in-out infinite;
       }
 
+      .brand-title {
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
       .conversation-status {
-        margin-left: auto;
+        margin-left: 8px;
+        flex: 0 0 auto;
         padding: 5px 10px;
         border: 1px solid var(--brand-color);
         border-radius: 999px;
@@ -1312,9 +1318,9 @@
                   <label for="voice-accent">Sotaque / variante
                     <select id="voice-accent">
                       <option value="brasil">🇧🇷 Português do Brasil</option>
-                      <option value="carioca">🌴 Carioca — aproximação</option>
+                      <option value="carioca">🌴 Carioca / Rio de Janeiro</option>
                       <option value="mineiro">⛰️ Mineiro — aproximação</option>
-                      <option value="baiano">🌴 Baiano — aproximação</option>
+                      <option value="baiano">🌴 Baiano / Bahia</option>
                       <option value="portugal">🇵🇹 Português de Portugal</option>
                     </select>
                   </label>
@@ -1323,7 +1329,7 @@
                   </label>
                   <p class="voice-help voice-request-help">O YODA só fala quando você pedir explicitamente na pergunta, seja por texto ou por áudio. Enviar uma pergunta pelo microfone não ativa a voz automaticamente.</p>
                   <button class="voice-preview" id="voice-preview" type="button">▶ Testar voz selecionada</button>
-                  <p class="voice-help">O YODA gera um MP3 com voz neural no servidor. Portugal usa voz nativa pt-PT; carioca, mineiro e baiano são aproximações sobre uma voz brasileira, porque o serviço não oferece essas variantes regionais como vozes separadas.</p>
+                  <p class="voice-help">O YODA usa voz neural. Carioca e baiano recebem ajustes de pronúncia e ritmo; são aproximações regionais, pois o serviço de voz não oferece vozes neurais nativas separadas para cada região.</p>
                 </section>
                 <button class="feedback-option" id="open-history" type="button">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -1475,7 +1481,8 @@
       conversationStatus.hidden = !conversationMode;
       conversationStatus.textContent = "🟢 Modo Conversação ativo";
       const chatHeader = document.querySelector("header") || document.querySelector(".chat-header");
-      if (chatHeader) chatHeader.appendChild(conversationStatus);
+      const brandTitle = chatHeader?.querySelector(".brand-title");
+      if (brandTitle) brandTitle.appendChild(conversationStatus);
 
       function setConversationMode(active) {
         conversationMode = Boolean(active);
@@ -1647,13 +1654,19 @@
 
       function prepareSpokenAnswer(text) {
         return String(text || "")
-          .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+          .replace(/\x60{3}[\s\S]*?\x60{3}/g, " ")
+          .replace(/\x60([^\x60]+)\x60/g, "$1")
+          .replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1")
           .replace(/https?:\/\/\S+/g, "")
           .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-          .replace(/\*\*(.*?)\*\*/g, "$1")
-          .replace(/__(.*?)__/g, "$1")
+          .replace(/^\s*>+\s?/gm, "")
+          .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
+          .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")
+          .replace(/~~([^~]+)~~/g, "$1")
           .replace(/^\s*[-*+]\s+/gm, "")
           .replace(/^\s*\d+[.)]\s+/gm, "")
+          .replace(/[*_~#|]/g, " ")
+          .replace(/<[^>]+>/g, " ")
           .replace(/\s+/g, " ")
           .trim();
       }
