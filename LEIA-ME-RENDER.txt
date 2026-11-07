@@ -82,8 +82,8 @@ Adicione somente os arquivos de aplicação/configuração (não inclua `.env` n
 
 ```bash
 git add main.py index.html requirements.txt .gitignore .env.example render.yaml
-git commit -m "Preparar Baby Yoda IA para Render"
-git push origin main
+git commit -m "Atualizar Baby Yoda IA"
+git push origin preparar-render
 ```
 
 ## 5. Criar o serviço no Render
@@ -94,14 +94,19 @@ Configuração manual:
 
 - Runtime: Python
 - Build Command: `pip install -r requirements.txt`
-- Start Command: `gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
+- Start Command: `gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 270`
 - Health Check Path: `/healthz`
 
 Cadastre no painel do Render estas Environment Variables:
 
 - `GEMINI_API_KEY`: sua chave da API Gemini
 - `SITE_PASSWORD`: a senha que os usuários digitarão no primeiro envio
-- `GEMINI_MODEL`: `gemini-2.5-flash`
+- `GEMINI_MODEL`: `gemini-3.8-flash`
+- `GEMINI_MODELS`: cadeia de sete modelos para texto/documentos
+- `GEMINI_AUDIO_MODELS`: cadeia de seis modelos para solicitações com áudio
+- `GEMINI_MODEL_RETRIES`: número de novas tentativas por modelo (padrão: 2)
+- `GEMINI_REQUEST_TIMEOUT_SECONDS`: timeout de cada tentativa (padrão: 45)
+- `GEMINI_FALLBACK_BUDGET_SECONDS`: orçamento total de fallback (padrão: 240)
 
 Não cadastre nem envie o arquivo `.env`.
 
@@ -110,5 +115,7 @@ Não cadastre nem envie o arquivo `.env`.
 - O site e a API passam a compartilhar o mesmo domínio. O CORS aberto foi removido porque não é necessário para essa arquitetura.
 - A chave Gemini fica no backend e é enviada à API no cabeçalho `x-goog-api-key`, em vez de aparecer na URL da chamada.
 - A interface continua enviando os campos `message`, `files`, `conversa` e `access_password`; a resposta continua sendo lida de `response`.
-- O backend mantém os limites existentes: até 10 documentos e 25 MB por requisição.
+- O backend aceita até 10 documentos/áudios combinados e mantém limite total de 25 MB por requisição.
+- A interface também aceita áudios WAV, MP3, AIFF, AAC, OGG, FLAC, M4A, OPUS, WEBM, L16, ALAW e MULAW.
+- Quando há áudio, o total de conteúdo binário enviado inline (áudios e PDFs combinados) fica limitado a 13 MB para permanecer abaixo do teto de 20 MB da API Gemini para áudio inline. Arquivos maiores exigem integração com a API Files.
 - O serviço foi configurado no plano gratuito do Render. Instâncias gratuitas podem entrar em repouso após períodos sem tráfego; isso pode causar demora na primeira visita.
