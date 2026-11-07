@@ -1825,6 +1825,7 @@
         // Envia apenas as fontes marcadas na lista lateral.
         const selectedSources = sources.filter((source) => source.included);
         const hasSelectedAudio = selectedSources.some((source) => source.kind === "audio");
+        const questionWasRecorded = selectedSources.some((source) => source.temporary);
         if (!selectedSources.length) {
           addMessage("Adicione e selecione pelo menos um documento ou áudio.", "assistant", true);
           return;
@@ -1919,6 +1920,15 @@
             speakButton.textContent = "🔊 Reproduzir novamente";
           });
           pending.append(speakButton);
+
+          // Quando a pergunta veio do microfone, inicia a leitura da resposta automaticamente.
+          if (questionWasRecorded && "speechSynthesis" in window) {
+            const spokenAnswer = new SpeechSynthesisUtterance(answer);
+            spokenAnswer.lang = "pt-BR";
+            spokenAnswer.rate = 1;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(spokenAnswer);
+          }
         } catch (error) {
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
           pending.classList.add("error");
