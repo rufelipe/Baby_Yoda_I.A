@@ -2126,8 +2126,8 @@
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
           pending.classList.add("error");
           pending.textContent =
-            `Não foi possível falar com a IA. ${error.message} ` +
-            "Confira a senha e os formatos aceitos: PDF/DOC/DOCX ou áudio MP3/WAV/M4A/OGG/FLAC/AAC/OPUS/WEBM.";
+            `Não foi possível concluir o pedido. ${error.message} ` +
+            "Se o problema continuar, tente novamente em alguns instantes.";
         } finally {
           // Reativa o botão mesmo se a comunicação com o backend falhar.
           sendButton.disabled = false;
