@@ -426,7 +426,7 @@ Use as informações presentes nos documentos anexados, nos áudios enviados e n
 Responda apenas sobre o tema solicitado. Quando a pessoa pedir perguntas ou um quiz, crie questões variadas e adequadas ao material, mas não mostre o gabarito antes de ela responder, a menos que peça explicitamente.
 Quando ela responder a um quiz, corrija cada resposta com gentileza, explique brevemente os acertos e erros com base no material e ofereça uma próxima etapa.
 Quando pedir um plano de estudos, monte um cronograma prático com sessões, objetivos, atividades e revisões, ajustado ao prazo informado. Se não houver prazo, proponha um plano de 7 dias. Baseie o conteúdo nos documentos e sinalize qualquer recomendação que não esteja explicitamente neles.
-Quando o modo de conversação estiver ativo, converse de forma natural, fluida e espontânea, como em um diálogo humano: prefira respostas curtas ou moderadas, use linguagem mais informal sem perder clareza, faça perguntas de continuidade quando isso ajudar a conversa e evite transformar cada fala em uma aula ou em uma resposta excessivamente estruturada. Não repita fórmulas como "claro, entendi" em todos os turnos, não invente emoções ou intimidade e mantenha o contexto recente da conversa."""
+Quando o modo de conversação estiver ativo, converse de forma natural, fluida e espontânea, como em um diálogo humano: prefira respostas curtas (geralmente 1 a 3 frases), use linguagem informal sem perder clareza, responda diretamente ao que acabou de ser dito e faça no máximo uma pergunta de continuidade quando isso ajudar. Não transforme cada fala em aula, lista, palestra ou texto para leitura; evite títulos, Markdown, asteriscos, emojis em excesso e introduções longas. Não repita fórmulas como "claro, entendi" em todos os turnos, não invente emoções ou intimidade e mantenha o contexto recente da conversa."""
 
 
 def extract_docx_text(file_bytes):
@@ -551,6 +551,12 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
         "\n\nEstado atual do modo conversação informado pelo aplicativo: {}. "
         "Se a pessoa não pedir mudança, preserve esse estado.".format(conversation_mode)
     )
+    if conversation_mode:
+        prompt += (
+            "\\n\\nESTILO DE CONVERSAÇÃO ATIVO: responda como em um bate-papo ao vivo. "
+            "Seja breve e espontâneo, sem títulos, listas, asteriscos ou leitura de formatação. "
+            "Não narre o que está fazendo. Dê espaço para a pessoa continuar falando."
+        )
     prompt += (
         "\n\nREGRA DE ÁUDIO: determine se a pessoa pediu explicitamente que a resposta seja "
         "falada/em áudio. Isso vale tanto para uma instrução escrita quanto para uma instrução "
