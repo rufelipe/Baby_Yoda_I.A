@@ -1043,6 +1043,33 @@
       /* Escurece o botão quando o cursor passa por cima. */
       button:hover:not(:disabled) { background: var(--brand-hover); }
 
+      .voice-record {
+        min-width: 52px;
+        padding: 0 14px;
+        background: #343b50;
+      }
+
+      .voice-record.recording {
+        background: #b42335;
+        animation: voice-pulse 1.2s ease-in-out infinite;
+      }
+
+      .speak-response {
+        display: block;
+        min-width: 0;
+        margin-top: 10px;
+        padding: 7px 11px;
+        border: 1px solid var(--border-color);
+        border-radius: 9px;
+        background: transparent;
+        color: inherit;
+        font-size: .88rem;
+      }
+
+      @keyframes voice-pulse {
+        50% { opacity: .65; }
+      }
+
       /* Destaca o botão Enviar ao passar o cursor e dá retorno ao pressioná-lo. */
       #send {
         transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
@@ -1228,7 +1255,8 @@
         <form id="chat-form">
           <div class="composer-row">
 
-            <textarea id="prompt" placeholder="Digite sua pergunta ou envie um áudio com a pergunta..." aria-label="Sua pergunta sobre os arquivos"></textarea>
+            <textarea id="prompt" placeholder="Digite sua pergunta ou fale pelo microfone..." aria-label="Sua pergunta sobre os arquivos"></textarea>
+            <button class="voice-record" id="voice-record" type="button" aria-label="Começar pergunta por voz" title="Perguntar por voz">🎙️</button>
             <button id="send" type="submit">Enviar</button>
           </div>
         </form>
@@ -1386,6 +1414,10 @@
       const messages = document.querySelector("#messages");
       const fileInput = document.querySelector("#file-input");
       const audioInput = document.querySelector("#audio-input");
+      const voiceRecordButton = document.querySelector("#voice-record");
+      let mediaRecorder = null;
+      let recordingStream = null;
+      let recordedChunks = [];
 
       const addFilesButton = document.querySelector("#add-files");
       const addAudioButton = document.querySelector("#add-audio");
@@ -1573,6 +1605,77 @@
           settingsMenu.hidden = true;
           settingsTrigger.setAttribute("aria-expanded", "false");
           settingsTrigger.focus();
+        }
+      });
+
+      // Grava uma pergunta pelo microfone e a envia como áudio ao backend.
+      voiceRecordButton.addEventListener("click", async () => {
+        if (isSending) return;
+
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+          voiceRecordButton.disabled = true;
+          voiceRecordButton.textContent = "Enviando...";
+          mediaRecorder.stop();
+          return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+          addMessage("Seu navegador não oferece gravação de áudio. Use um navegador atualizado e acesse o site por HTTPS.", "assistant", true);
+          return;
+        }
+
+        try {
+          recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          recordedChunks = [];
+          const mimeCandidates = [
+            "audio/webm;codecs=opus",
+            "audio/ogg;codecs=opus",
+            "audio/mp4"
+          ];
+          const selectedMime = mimeCandidates.find((type) => MediaRecorder.isTypeSupported(type));
+          mediaRecorder = selectedMime
+            ? new MediaRecorder(recordingStream, { mimeType: selectedMime })
+            : new MediaRecorder(recordingStream);
+
+          mediaRecorder.addEventListener("dataavailable", (event) => {
+            if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+          });
+
+          mediaRecorder.addEventListener("stop", () => {
+            recordingStream?.getTracks().forEach((track) => track.stop());
+            recordingStream = null;
+
+            const mimeType = mediaRecorder.mimeType || "audio/webm";
+            const extension = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
+            const audioBlob = new Blob(recordedChunks, { type: mimeType });
+            recordedChunks = [];
+
+            if (!audioBlob.size) {
+              voiceRecordButton.disabled = false;
+              voiceRecordButton.textContent = "🎙️";
+              addMessage("Não consegui capturar o áudio. Tente gravar novamente.", "assistant", true);
+              return;
+            }
+
+            const audioFile = new File([audioBlob], "pergunta-por-voz-" + Date.now() + "." + extension, { type: mimeType });
+            sources.push({ file: audioFile, kind: "audio", included: true, temporary: true });
+            renderSources();
+            voiceRecordButton.disabled = false;
+            voiceRecordButton.textContent = "🎙️";
+            form.requestSubmit();
+          });
+
+          mediaRecorder.start();
+          voiceRecordButton.classList.add("recording");
+          voiceRecordButton.textContent = "⏹";
+          voiceRecordButton.setAttribute("aria-label", "Parar gravação e enviar pergunta");
+          voiceRecordButton.title = "Parar gravação e enviar pergunta";
+        } catch (error) {
+          recordingStream?.getTracks().forEach((track) => track.stop());
+          recordingStream = null;
+          voiceRecordButton.disabled = false;
+          voiceRecordButton.textContent = "🎙️";
+          addMessage("Não foi possível acessar o microfone. Verifique a permissão do navegador e tente novamente.", "assistant", true);
         }
       });
 
@@ -1797,6 +1900,25 @@
           }
           // Troca o aviso temporário pela resposta da IA.
           pending.textContent = answer;
+
+          // Disponibiliza a resposta falada usando a voz instalada no navegador.
+          const speakButton = document.createElement("button");
+          speakButton.type = "button";
+          speakButton.className = "speak-response";
+          speakButton.textContent = "🔊 Ouvir resposta";
+          speakButton.addEventListener("click", () => {
+            if (!("speechSynthesis" in window)) {
+              addMessage("A leitura em voz alta não está disponível neste navegador.", "assistant", true);
+              return;
+            }
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(answer);
+            utterance.lang = "pt-BR";
+            utterance.rate = 1;
+            window.speechSynthesis.speak(utterance);
+            speakButton.textContent = "🔊 Reproduzir novamente";
+          });
+          pending.append(speakButton);
         } catch (error) {
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
           pending.classList.add("error");
@@ -1807,6 +1929,13 @@
           // Reativa o botão mesmo se a comunicação com o backend falhar.
           sendButton.disabled = false;
           isSending = false;
+          // Remove apenas o áudio gravado para esta pergunta; os PDFs continuam selecionados.
+          sources = sources.filter((source) => !source.temporary);
+          voiceRecordButton.disabled = false;
+          voiceRecordButton.classList.remove("recording");
+          voiceRecordButton.textContent = "🎙️";
+          voiceRecordButton.setAttribute("aria-label", "Começar pergunta por voz");
+          voiceRecordButton.title = "Perguntar por voz";
           addFilesButton.disabled = false;
           fileInput.disabled = false;
           addAudioButton.disabled = false;
