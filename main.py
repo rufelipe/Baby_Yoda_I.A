@@ -517,7 +517,7 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
     )
     prompt += (
         "\n\nEstado atual do modo conversação informado pelo aplicativo: {}. "
-        "Se a pessoa não pedir mudança, preserve esse estado.".format(current_conversation_mode)
+        "Se a pessoa não pedir mudança, preserve esse estado.".format(conversation_mode)
     )
     prompt += (
         "\n\nREGRA DE ÁUDIO: determine se a pessoa pediu explicitamente que a resposta seja "
