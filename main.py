@@ -347,8 +347,10 @@ def synthesize_voice(text, profile_name="calma", accent="brasil"):
     rate = profile["rate"]
     pitch = profile["pitch"]
     if accent == "baiano":
-        rate = "-4%" if rate == "0%" else rate
-        pitch = "+2Hz" if pitch == "0Hz" else pitch
+        rate_value = int(re.match(r"[+-]?\\d+", rate).group(0)) if re.match(r"[+-]?\\d+", rate) else 0
+        pitch_value = int(re.match(r"[+-]?\\d+", pitch).group(0)) if re.match(r"[+-]?\\d+", pitch) else 0
+        rate = "{}%".format(rate_value - 5)
+        pitch = "{}Hz".format(pitch_value + 2)
 
     async def generate():
         communicator = edge_tts.Communicate(
@@ -530,7 +532,7 @@ def prepare_audio(upload):
     return part, len(file_bytes)
 
 
-def call_gemini(message, conversation, documents, audio_parts=None, conversation_mode=False):
+def call_gemini(message, conversation, documents, audio_parts=None, conversation_mode=False, voice_accent="brasil"):
     if not API_KEY:
         raise RuntimeError(
             "A chave da API não está configurada. Defina a variável de ambiente GEMINI_API_KEY no backend."
@@ -557,6 +559,16 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
             "Seja breve e espontâneo, sem títulos, listas, asteriscos ou leitura de formatação. "
             "Não narre o que está fazendo. Dê espaço para a pessoa continuar falando."
         )
+        if voice_accent == "carioca":
+            prompt += (
+                "\\nUse um jeito de falar carioca natural e leve, com expressões do Rio apenas "
+                "quando couberem (por exemplo, 'pô' ou 'maneiro'). Evite caricatura e não force gírias."
+            )
+        elif voice_accent == "baiano":
+            prompt += (
+                "\\nUse um jeito de falar baiano natural e acolhedor, com expressões regionais "
+                "como 'oxe' ou 'massa' somente quando fizerem sentido. Evite caricatura e não force bordões."
+            )
     prompt += (
         "\n\nREGRA DE ÁUDIO: determine se a pessoa pediu explicitamente que a resposta seja "
         "falada/em áudio. Isso vale tanto para uma instrução escrita quanto para uma instrução "
@@ -796,6 +808,9 @@ def perguntar():
     message = (request.form.get("message") or "").strip()
     requested_audio = wants_audio_response(message)
     current_conversation_mode = (request.form.get("conversation_mode") or "").strip().lower() == "true"
+    requested_voice_accent = ACCENT_ALIASES.get(
+        str(request.form.get("voice_accent") or "brasil").strip().casefold(), "brasil"
+    )
     normalized_message = re.sub(r"\\s+", " ", message).casefold().strip()
     start_conversation = any(
         phrase in normalized_message
@@ -873,6 +888,7 @@ def perguntar():
             documents,
             audio_parts,
             current_conversation_mode,
+            requested_voice_accent,
         )
         answer = result["answer"]
         model_conversation_mode = result.get("conversation_mode")
