@@ -347,8 +347,10 @@ def synthesize_voice(text, profile_name="calma", accent="brasil"):
     rate = profile["rate"]
     pitch = profile["pitch"]
     if accent == "baiano":
-        rate_value = int(re.match(r"[+-]?\\d+", rate).group(0)) if re.match(r"[+-]?\\d+", rate) else 0
-        pitch_value = int(re.match(r"[+-]?\\d+", pitch).group(0)) if re.match(r"[+-]?\\d+", pitch) else 0
+        rate_match = re.match(r"[+-]?\d+", rate)
+        pitch_match = re.match(r"[+-]?\d+", pitch)
+        rate_value = int(rate_match.group(0)) if rate_match else 0
+        pitch_value = int(pitch_match.group(0)) if pitch_match else 0
         rate = "{}%".format(rate_value - 5)
         pitch = "{}Hz".format(pitch_value + 2)
 
