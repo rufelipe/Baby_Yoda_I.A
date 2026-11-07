@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 270
     healthCheckPath: /healthz
     envVars:
       - key: GEMINI_API_KEY
@@ -14,4 +14,10 @@ services:
       - key: GEMINI_MODEL
         value: gemini-3.8-flash
       - key: GEMINI_MODELS
-        value: gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite
+        value: gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3-flash-preview,gemini-3.1-pro-preview
+      - key: GEMINI_MODEL_RETRIES
+        value: "2"
+      - key: GEMINI_REQUEST_TIMEOUT_SECONDS
+        value: "45"
+      - key: GEMINI_FALLBACK_BUDGET_SECONDS
+        value: "240"
