@@ -1112,6 +1112,16 @@
         animation: voice-pulse 1.2s ease-in-out infinite;
       }
 
+      .conversation-status {
+        margin-left: auto;
+        padding: 5px 10px;
+        border: 1px solid var(--brand-color);
+        border-radius: 999px;
+        color: var(--brand-color);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
       .speak-response {
         display: block;
         min-width: 0;
@@ -1459,6 +1469,39 @@
       // O backend deve receber multipart/form-data e extrair as fontes dos documentos.
       // Para garantir respostas somente com base nos arquivos, essa regra também deve ser aplicada no backend.
       const REQUEST_FIELD = "message";
+      let conversationMode = sessionStorage.getItem("babyYodaConversationMode") === "true";
+      const conversationStatus = document.createElement("div");
+      conversationStatus.className = "conversation-status";
+      conversationStatus.hidden = !conversationMode;
+      conversationStatus.textContent = "🟢 Modo Conversação ativo";
+      const chatHeader = document.querySelector("header") || document.querySelector(".chat-header");
+      if (chatHeader) chatHeader.appendChild(conversationStatus);
+
+      function setConversationMode(active) {
+        conversationMode = Boolean(active);
+        sessionStorage.setItem("babyYodaConversationMode", conversationMode ? "true" : "false");
+        conversationStatus.hidden = !conversationMode;
+      }
+
+      function textRequestsConversationStart(text) {
+        const normalized = String(text || "").toLocaleLowerCase("pt-BR").replace(/\\s+/g, " ").trim();
+        return [
+          "podemos conversar", "quero conversar", "vamos conversar",
+          "vamos bater papo", "quero bater papo", "quero falar com você",
+          "quero falar com voce", "podemos bater papo"
+        ].some((phrase) => normalized.includes(phrase));
+      }
+
+      function textRequestsConversationStop(text) {
+        const normalized = String(text || "").toLocaleLowerCase("pt-BR").replace(/\\s+/g, " ").trim();
+        return [
+          "sair do modo conversação", "sair do modo conversacao",
+          "encerrar o modo conversação", "encerrar o modo conversacao",
+          "voltar ao modo normal", "pare o modo conversação",
+          "pare o modo conversacao"
+        ].some((phrase) => normalized.includes(phrase));
+      }
+
       const FILES_FIELD = "files";
       // Nome do campo de texto esperado na resposta JSON; por exemplo, { "response": "Olá" }.
             const RESPONSE_FIELD = "response";
@@ -2046,6 +2089,11 @@
           return;
         }
         const requestMessage = message || "Ouça o áudio anexado, identifique a pergunta falada e responda em português.";
+        if (textRequestsConversationStart(message)) {
+          setConversationMode(true);
+        } else if (textRequestsConversationStop(message)) {
+          setConversationMode(false);
+        }
         sendButton.disabled = true;
         const accessPassword = await getAccessPassword();
         if (!accessPassword) {
@@ -2085,6 +2133,7 @@
           requestBody.append(REQUEST_FIELD, requestMessage);
           requestBody.append("access_password", accessPassword);
           requestBody.append("conversa", conversationContext);
+          requestBody.append("conversation_mode", String(conversationMode));
           selectedSources.forEach(({ file, kind }) => {
             requestBody.append(kind === "audio" ? "audios" : FILES_FIELD, file);
           });
@@ -2110,6 +2159,11 @@
           if (typeof answer !== "string" || !answer.trim()) {
             throw new Error(`A resposta não contém o campo "${RESPONSE_FIELD}" como texto.`);
           }
+          // Atualiza o modo conversação com o estado confirmado pelo backend.
+          if (typeof data.conversation_mode === "boolean") {
+            setConversationMode(data.conversation_mode);
+          }
+
           // Troca o aviso temporário pela resposta da IA.
           pending.textContent = answer;
 
@@ -2135,7 +2189,7 @@
 
           // Só gera voz quando houver pedido explícito de resposta em áudio.
           // Isso vale para pedidos escritos e para pedidos identificados no áudio da pergunta.
-          const shouldSpeak = data.speak_audio === true;
+          const shouldSpeak = data.speak_audio === true || (conversationMode && !textRequestsConversationStop(message));
           if (shouldSpeak) {
             const speakButton = document.createElement("button");
             speakButton.type = "button";
