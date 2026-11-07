@@ -1311,7 +1311,8 @@
                   <label for="voice-speed">Velocidade: <output id="voice-speed-value">1,0x</output>
                     <input id="voice-speed" type="range" min="0.7" max="1.4" step="0.1" value="1">
                   </label>
-                  <label class="voice-toggle-row"><input id="voice-auto" type="checkbox" checked> Falar respostas automaticamente</label>
+                  <label class="voice-toggle-row"><input id="voice-auto" type="checkbox"> Falar respostas automaticamente</label>
+                  <p class="voice-help voice-request-help">Por padrão, o YODA só fala quando você pedir explicitamente na pergunta. A opção acima fica disponível apenas para quem quiser leitura automática.</p>
                   <button class="voice-preview" id="voice-preview" type="button">▶ Testar voz selecionada</button>
                   <p class="voice-help">O YODA gera um MP3 com voz neural no servidor. Portugal usa voz nativa pt-PT; carioca, mineiro e baiano são aproximações sobre uma voz brasileira, porque o serviço não oferece essas variantes regionais como vozes separadas.</p>
                 </section>
@@ -2137,23 +2138,21 @@
             pending.append(generatedImage, downloadImage);
           }
 
-          // Disponibiliza a resposta falada usando a voz neural escolhida no servidor.
-          const speakButton = document.createElement("button");
-          speakButton.type = "button";
-          speakButton.className = "speak-response";
-          speakButton.textContent = "🔊 Ouvir resposta";
-          speakButton.addEventListener("click", async () => {
+          // Só gera voz quando o pedido explícito veio da pessoa.
+          // A opção de leitura automática permanece como preferência adicional,
+          // mas nunca faz o YODA falar uma resposta que não foi solicitada.
+          const shouldSpeak = data.speak_audio === true;
+          if (shouldSpeak) {
+            const speakButton = document.createElement("button");
+            speakButton.type = "button";
+            speakButton.className = "speak-response";
+            speakButton.textContent = "🔊 Gerando resposta em áudio...";
             speakButton.disabled = true;
-            speakButton.textContent = "⏳ Gerando áudio...";
+            pending.append(speakButton);
+
             const ok = await speakAnswer(answer);
             speakButton.disabled = false;
             speakButton.textContent = ok ? "🔊 Reproduzir novamente" : "⚠ Tentar voz novamente";
-          });
-          pending.append(speakButton);
-
-          // Fala automaticamente a resposta quando essa opção estiver ativa.
-          if (voiceAutoCheckbox.checked) {
-            speakAnswer(answer);
           }
         } catch (error) {
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
