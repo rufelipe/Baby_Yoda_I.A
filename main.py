@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hmac
 import json
@@ -10,7 +11,10 @@ import urllib.request
 import requests
 import time
 import zipfile
+import tempfile
 from xml.etree import ElementTree
+
+import edge_tts
 
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -260,6 +264,100 @@ def request_ai_horde_image(prompt, aspect_ratio="1:1"):
 
 def validate_access_password(supplied_password):
     return bool(ACCESS_PASSWORD) and hmac.compare_digest(supplied_password or "", ACCESS_PASSWORD)
+
+
+VOICE_PROFILES = {
+    "sombria": {"voice": "pt-BR-AntonioNeural", "rate": "-12%", "pitch": "-18Hz"},
+    "alegre": {"voice": "pt-BR-AntonioNeural", "rate": "+12%", "pitch": "+8Hz"},
+    "crianca": {"voice": "pt-BR-LeticiaNeural", "rate": "+5%", "pitch": "+12Hz"},
+    "mulher": {"voice": "pt-BR-YaraNeural", "rate": "0%", "pitch": "0Hz"},
+    "mulher-alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+10%", "pitch": "+5Hz"},
+    "mulher-irritada": {"voice": "pt-BR-ThalitaNeural", "rate": "+8%", "pitch": "+1Hz"},
+    "calma": {"voice": "pt-BR-YaraNeural", "rate": "-10%", "pitch": "-2Hz"},
+}
+
+ACCENT_LOCALES = {
+    "brasil": "pt-BR",
+    "portugal": "pt-PT",
+    "carioca": "pt-BR",
+    "mineiro": "pt-BR",
+    "baiano": "pt-BR",
+}
+
+PORTUGAL_VOICE_FALLBACKS = {
+    "sombria": "pt-PT-DuarteNeural",
+    "alegre": "pt-PT-DuarteNeural",
+    "crianca": "pt-PT-FernandaNeural",
+    "mulher": "pt-PT-RaquelNeural",
+    "mulher-alegre": "pt-PT-RaquelNeural",
+    "mulher-irritada": "pt-PT-RaquelNeural",
+    "calma": "pt-PT-FernandaNeural",
+}
+
+
+def synthesize_voice(text, profile_name="calma", accent="brasil"):
+    """Gera MP3 com uma voz neural gratuita via Edge TTS, sem chave de API."""
+    profile = VOICE_PROFILES.get(profile_name, VOICE_PROFILES["calma"])
+    locale = ACCENT_LOCALES.get(accent, "pt-BR")
+    voice = profile["voice"] if locale == "pt-BR" else PORTUGAL_VOICE_FALLBACKS.get(profile_name, "pt-PT-RaquelNeural")
+    clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not clean_text:
+        raise ValueError("Não há texto para sintetizar.")
+    clean_text = clean_text[:12000]
+
+    async def generate():
+        communicator = edge_tts.Communicate(
+            clean_text,
+            voice,
+            rate=profile["rate"],
+            pitch=profile["pitch"],
+            volume="+0%",
+        )
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+            temp_path = temp_file.name
+        try:
+            await communicator.save(temp_path)
+            with open(temp_path, "rb") as audio_file:
+                return audio_file.read()
+        finally:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+    try:
+        return asyncio.run(generate())
+    except Exception as error:
+        raise RuntimeError("O serviço gratuito de voz não conseguiu gerar o áudio: {}".format(error))
+
+
+@app.route("/sintetizar-voz", methods=["POST"])
+def sintetizar_voz():
+    if not ACCESS_PASSWORD:
+        return jsonify({"error": "O acesso ainda não foi configurado pelo administrador."}), 503
+    data = request.get_json(silent=True) or {}
+    if not validate_access_password(data.get("access_password", "")):
+        return jsonify({"error": "Senha de acesso incorreta."}), 401
+    text = prepare_spoken_text(data.get("text", ""))
+    profile = str(data.get("profile", "calma")).strip().lower()
+    accent = str(data.get("accent", "brasil")).strip().lower()
+    if profile not in VOICE_PROFILES:
+        return jsonify({"error": "Perfil de voz não reconhecido."}), 400
+    if accent not in ACCENT_LOCALES:
+        return jsonify({"error": "Sotaque/variante de português não reconhecido."}), 400
+    try:
+        audio_bytes = synthesize_voice(text, profile, accent)
+        return jsonify({
+            "audio": "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("ascii"),
+            "profile": profile,
+            "accent": accent,
+        })
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 502
+
+
 AUDIO_MIME_TYPES = {
     ".wav": "audio/wav",
     ".mp3": "audio/mp3",
@@ -315,6 +413,18 @@ def extract_legacy_doc_text(file_bytes):
             "Não consegui extrair texto deste DOC antigo. Salve-o como DOCX ou PDF e envie novamente."
         )
     return text[:MAX_DOCUMENT_TEXT]
+
+
+def prepare_spoken_text(text):
+    """Limpa Markdown e URLs para que a voz fale como uma resposta natural."""
+    cleaned = re.sub(r"https?://\S+", "", str(text or ""))
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+    cleaned = re.sub(r"(?m)^\s*#{1,6}\s+", "", cleaned)
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+    cleaned = re.sub(r"(?m)^\s*[-*+]\s+", "", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\d+[.)]\s+", "", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def prepare_document(upload):
