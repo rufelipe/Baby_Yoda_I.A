@@ -266,6 +266,27 @@ def validate_access_password(supplied_password):
     return bool(ACCESS_PASSWORD) and hmac.compare_digest(supplied_password or "", ACCESS_PASSWORD)
 
 
+def wants_audio_response(message):
+    """Detecta pedidos explícitos para que a resposta seja falada."""
+    normalized = re.sub(r"\s+", " ", str(message or "")).casefold().strip()
+    if not normalized:
+        return False
+    explicit_phrases = (
+        "em áudio", "em audio",
+        "por áudio", "por audio",
+        "responda em áudio", "responda em audio",
+        "responda por áudio", "responda por audio",
+        "me responda falando", "me responda falando",
+        "quero ouvir a resposta", "quero ouvir sua resposta",
+        "quero ouvir", "pode falar a resposta",
+        "fale a resposta", "fale para mim",
+        "leia a resposta", "leia para mim",
+        "responda oralmente", "resposta falada",
+        "só áudio", "so audio", "somente áudio", "somente audio",
+    )
+    return any(phrase in normalized for phrase in explicit_phrases)
+
+
 VOICE_PROFILES = {
     "sombria": {"voice": "pt-BR-AntonioNeural", "rate": "-12%", "pitch": "-18Hz"},
     "alegre": {"voice": "pt-BR-AntonioNeural", "rate": "+12%", "pitch": "+8Hz"},
@@ -677,6 +698,7 @@ def perguntar():
         return jsonify({"error": "Senha de acesso incorreta."}), 401
 
     message = (request.form.get("message") or "").strip()
+    requested_audio = wants_audio_response(message)
     uploads = request.files.getlist("files")
     audio_uploads = request.files.getlist("audios")
 
@@ -728,7 +750,10 @@ def perguntar():
             documents,
             audio_parts,
         )
-        return jsonify({"response": answer})
+        return jsonify({
+            "response": answer,
+            "speak_audio": requested_audio,
+        })
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     except RuntimeError as error:
