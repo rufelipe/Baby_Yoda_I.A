@@ -326,7 +326,7 @@ def apply_regional_pronunciation(text, accent):
         # Em posição final de sílaba, o S carioca frequentemente soa como "sh".
         text = re.sub(
             r"s(?=(?:\s+[bcdfghjklmnpqrstvwxyz]|[,.;:!?]|$))",
-            "sh", text, flags=re.IGNORECASE
+            "x", text, flags=re.IGNORECASE
         )
     elif accent == "baiano":
         # Preserva as palavras e adota uma cadência mais relaxada, sem bordões artificiais.
