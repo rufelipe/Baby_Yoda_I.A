@@ -88,6 +88,11 @@ AI_HORDE_BASE_URL = "https://aihorde.net/api/v2"
 AI_HORDE_ANONYMOUS_KEY = "0000000000"
 AI_HORDE_CLIENT_AGENT = "Baby-Yoda-IA:1.0:github.com/rufelipe/Baby_Yoda_I.A"
 
+
+class AIHordeRateLimitError(RuntimeError):
+    """Indica que o serviço gratuito recusou a solicitação por limite de uso."""
+
+
 IMAGE_DIMENSIONS = {
     "1:1": (512, 512),
     "3:2": (768, 512),
@@ -161,8 +166,26 @@ def request_ai_horde_image(prompt, aspect_ratio="1:1"):
                 "A proteção Cloudflare do serviço gratuito bloqueou a conexão do servidor "
                 "(erro 1010). Não é uma falha na sua senha. Tente novamente mais tarde."
             )
+        if submit_response.status_code == 429:
+            try:
+                rate_limit = submit_response.json()
+            except ValueError:
+                rate_limit = {}
+            reason = rate_limit.get("rc", "")
+            if reason == "TooManyPrompts":
+                raise AIHordeRateLimitError(
+                    "O limite compartilhado de pedidos anônimos do serviço gratuito de imagens "
+                    "foi atingido. Nenhuma imagem foi solicitada novamente e nenhuma cobrança foi feita. "
+                    "Aguarde a redução da demanda ou configure uma chave pessoal gratuita do AI Horde."
+                )
+            raise AIHordeRateLimitError(
+                "O serviço gratuito de imagens está temporariamente limitando solicitações (HTTP 429). "
+                "Aguarde alguns minutos antes de tentar novamente."
+            )
         submit_response.raise_for_status()
         submission = submit_response.json()
+    except AIHordeRateLimitError:
+        raise
     except requests.RequestException as error:
         details = ""
         if getattr(error, "response", None) is not None:
