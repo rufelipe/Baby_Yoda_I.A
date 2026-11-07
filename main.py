@@ -579,6 +579,8 @@ def perguntar():
                 "image_description": image_result["description"],
                 "image_model": image_result["model"],
             })
+        except AIHordeRateLimitError as error:
+            return jsonify({"error": str(error), "code": "image_rate_limited"}), 429
         except RuntimeError as error:
             return jsonify({"error": str(error)}), 502
 
