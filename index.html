@@ -2147,6 +2147,7 @@
           requestBody.append("access_password", accessPassword);
           requestBody.append("conversa", conversationContext);
           requestBody.append("conversation_mode", String(conversationMode));
+          requestBody.append("voice_accent", voiceAccentSelect.value);
           selectedSources.forEach(({ file, kind }) => {
             requestBody.append(kind === "audio" ? "audios" : FILES_FIELD, file);
           });
