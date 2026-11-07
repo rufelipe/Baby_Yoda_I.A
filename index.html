@@ -249,6 +249,10 @@
         color: #2673c8;
       }
 
+      .file-type.audio {
+        color: #15958a;
+      }
+
       .source-name {
         overflow: hidden;
         color: var(--text-color);
@@ -1140,8 +1144,14 @@
         <input id="file-input" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
         <button class="add-files" id="add-files" type="button">
           <span class="plus" aria-hidden="true">+</span>
-          Adicionar fontes
+          Adicionar documentos
         </button>
+        <input id="audio-input" type="file" accept=".wav,.mp3,.aiff,.aif,.aac,.ogg,.oga,.flac,.m4a,.opus,.webm,.l16,.alaw,.mulaw" multiple hidden>
+        <button class="add-files" id="add-audio" type="button">
+          <span class="plus" aria-hidden="true">♫</span>
+          Adicionar áudio
+        </button>
+        <p class="sources-count">Áudio: MP3, WAV, M4A, OGG, FLAC, AAC, OPUS e WEBM · até 13 MB por envio</p>
         <div class="sources-select-all">
           <span id="selected-count">0 selecionadas</span>
           <label for="select-all">Selecionar tudo
@@ -1150,7 +1160,7 @@
         </div>
         <!-- As fontes adicionadas aparecem aqui como linhas selecionáveis. -->
         <div class="file-list" id="file-list" aria-live="polite">
-          <p class="sources-empty" id="sources-empty">Seus documentos adicionados aparecerão aqui.</p>
+          <p class="sources-empty" id="sources-empty">Seus documentos e áudios adicionados aparecerão aqui.</p>
         </div>
       </aside>
 
@@ -1218,7 +1228,7 @@
         <form id="chat-form">
           <div class="composer-row">
 
-            <textarea id="prompt" placeholder="Pergunte sobre as fontes selecionadas..." aria-label="Sua pergunta sobre os arquivos" required></textarea>
+            <textarea id="prompt" placeholder="Digite sua pergunta ou envie um áudio com a pergunta..." aria-label="Sua pergunta sobre os arquivos"></textarea>
             <button id="send" type="submit">Enviar</button>
           </div>
         </form>
@@ -1375,8 +1385,10 @@
             const sendButton = document.querySelector("#send");
       const messages = document.querySelector("#messages");
       const fileInput = document.querySelector("#file-input");
+      const audioInput = document.querySelector("#audio-input");
 
       const addFilesButton = document.querySelector("#add-files");
+      const addAudioButton = document.querySelector("#add-audio");
       const fileList = document.querySelector("#file-list");
       const selectAllCheckbox = document.querySelector("#select-all");
       const selectedCount = document.querySelector("#selected-count");
@@ -1564,10 +1576,11 @@
         }
       });
 
-      // Abre o seletor de arquivos ao clicar em "Adicionar fontes".
+      // Abre os seletores de documentos e áudio.
       addFilesButton.addEventListener("click", () => fileInput.click());
+      addAudioButton.addEventListener("click", () => audioInput.click());
 
-      // Atualiza a lista de documentos, as caixas de seleção e os contadores.
+      // Atualiza a lista de documentos/áudios, as caixas de seleção e os contadores.
       function renderSources() {
         fileList.replaceChildren();
         const includedCount = sources.filter((source) => source.included).length;
@@ -1591,8 +1604,9 @@
 
           const fileType = document.createElement("span");
           const extension = source.file.name.split(".").pop().toLowerCase();
-          fileType.className = `file-type${extension === "doc" || extension === "docx" ? " doc" : ""}`;
-          fileType.textContent = extension === "pdf" ? "PDF" : "DOC";
+          const isAudio = source.kind === "audio";
+          fileType.className = `file-type${isAudio ? " audio" : extension === "doc" || extension === "docx" ? " doc" : ""}`;
+          fileType.textContent = isAudio ? extension.toUpperCase().slice(0, 4) : extension === "pdf" ? "PDF" : "DOC";
           fileType.setAttribute("aria-hidden", "true");
 
           const name = document.createElement("span");
@@ -1634,12 +1648,17 @@
         renderSources();
       });
 
-      // Acrescenta os arquivos escolhidos sem duplicar os que já estão na lista.
-      fileInput.addEventListener("change", () => {
-        const acceptedExtensions = [".pdf", ".doc", ".docx"];
+      // Acrescenta documentos ou áudios sem duplicar arquivos já selecionados.
+      function addFilesToSources(fileCollection, kind) {
+        const documentExtensions = [".pdf", ".doc", ".docx"];
+        const audioExtensions = [
+          ".wav", ".mp3", ".aiff", ".aif", ".aac", ".ogg", ".oga",
+          ".flac", ".m4a", ".opus", ".webm", ".l16", ".alaw", ".mulaw"
+        ];
+        const acceptedExtensions = kind === "audio" ? audioExtensions : documentExtensions;
         const invalidFiles = [];
 
-        Array.from(fileInput.files).forEach((file) => {
+        Array.from(fileCollection).forEach((file) => {
           const fileName = file.name.toLowerCase();
           const isSupported = acceptedExtensions.some((extension) => fileName.endsWith(extension));
           if (!isSupported) {
@@ -1647,20 +1666,32 @@
             return;
           }
 
-          const alreadyAdded = sources.some(({ file: addedFile }) =>
-            addedFile.name === file.name &&
-            addedFile.size === file.size &&
-            addedFile.lastModified === file.lastModified
+          const alreadyAdded = sources.some((source) =>
+            source.kind === kind &&
+            source.file.name === file.name &&
+            source.file.size === file.size &&
+            source.file.lastModified === file.lastModified
           );
-          if (!alreadyAdded) sources.push({ file, included: true });
+          if (!alreadyAdded) sources.push({ file, kind, included: true });
         });
 
         renderSources();
-        fileInput.value = "";
-
         if (invalidFiles.length) {
-          addMessage(`Formato não aceito: ${invalidFiles.join(", ")}. Selecione PDF, DOC ou DOCX.`, "assistant", true);
+          const formats = kind === "audio"
+            ? "MP3, WAV, M4A, OGG, FLAC, AAC, AIFF, OPUS ou WEBM"
+            : "PDF, DOC ou DOCX";
+          addMessage(`Formato não aceito: ${invalidFiles.join(", ")}. Selecione: ${formats}.`, "assistant", true);
         }
+      }
+
+      fileInput.addEventListener("change", () => {
+        addFilesToSources(fileInput.files, "document");
+        fileInput.value = "";
+      });
+
+      audioInput.addEventListener("change", () => {
+        addFilesToSources(audioInput.files, "audio");
+        audioInput.value = "";
       });
 
       // Cria uma mensagem na conversa, com estilo de usuário, assistente ou erro.
@@ -1686,14 +1717,20 @@
         event.preventDefault();
         // Lê o texto digitado e remove espaços sobrando no início e no fim.
         const message = input.value.trim();
-        // Não envia mensagens vazias nem permite envios repetidos enquanto aguarda.
-        if (!message || sendButton.disabled) return;
+        // Não permite envios repetidos enquanto aguarda.
+        if (sendButton.disabled) return;
         // Envia apenas as fontes marcadas na lista lateral.
-                const selectedSources = sources.filter((source) => source.included);
-                if (!selectedSources.length) {
-          addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
+        const selectedSources = sources.filter((source) => source.included);
+        const hasSelectedAudio = selectedSources.some((source) => source.kind === "audio");
+        if (!selectedSources.length) {
+          addMessage("Adicione e selecione pelo menos um documento ou áudio.", "assistant", true);
           return;
         }
+        if (!message && !hasSelectedAudio) {
+          addMessage("Digite uma pergunta ou envie um áudio com a pergunta falada.", "assistant", true);
+          return;
+        }
+        const requestMessage = message || "Ouça o áudio anexado, identifique a pergunta falada e responda em português.";
         sendButton.disabled = true;
         const accessPassword = await getAccessPassword();
         if (!accessPassword) {
@@ -1710,9 +1747,9 @@
           .join("\n")
           .slice(-6000);
 
-        saveQuestionToHistory(message);
+        saveQuestionToHistory(message || "Pergunta enviada por áudio.");
         // Mostra imediatamente a mensagem da pessoa na conversa.
-        addMessage(message, "user");
+        addMessage(message || "🎙️ Pergunta enviada por áudio.", "user");
         // Limpa o campo para permitir que a pessoa continue digitando.
         input.value = "";
         // Desativa o botão enquanto a IA está processando a solicitação.
@@ -1720,18 +1757,22 @@
         isSending = true;
         addFilesButton.disabled = true;
         fileInput.disabled = true;
+        addAudioButton.disabled = true;
+        audioInput.disabled = true;
         renderSources();
         // Mostra um aviso temporário que será substituído pela resposta da IA.
-        const pending = addMessage("Consultando os arquivos...", "assistant");
+        const pending = addMessage("Analisando documentos e áudios...", "assistant");
 
         try {
           // Envia a pergunta e apenas as fontes marcadas como multipart/form-data.
           // O backend precisa aceitar REQUEST_FIELD e vários campos FILES_FIELD.
                     const requestBody = new FormData();
-          requestBody.append(REQUEST_FIELD, message);
+          requestBody.append(REQUEST_FIELD, requestMessage);
           requestBody.append("access_password", accessPassword);
           requestBody.append("conversa", conversationContext);
-          selectedSources.forEach(({ file }) => requestBody.append(FILES_FIELD, file));
+          selectedSources.forEach(({ file, kind }) => {
+            requestBody.append(kind === "audio" ? "audios" : FILES_FIELD, file);
+          });
 
 
           const response = await fetch(API_URL, {
@@ -1761,13 +1802,15 @@
           pending.classList.add("error");
           pending.textContent =
             `Não foi possível falar com a IA. ${error.message} ` +
-            "Verifique se o serviço está ativo, se a senha de acesso está correta e se os documentos são PDF, DOC ou DOCX.";
+            "Confira a senha e os formatos aceitos: PDF/DOC/DOCX ou áudio MP3/WAV/M4A/OGG/FLAC/AAC/OPUS/WEBM.";
         } finally {
           // Reativa o botão mesmo se a comunicação com o backend falhar.
           sendButton.disabled = false;
           isSending = false;
           addFilesButton.disabled = false;
           fileInput.disabled = false;
+          addAudioButton.disabled = false;
+          audioInput.disabled = false;
           renderSources();
           // Devolve o cursor ao campo de texto para facilitar a próxima mensagem.
           input.focus();
