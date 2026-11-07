@@ -2,10 +2,12 @@ import base64
 import hmac
 import json
 import os
+import random
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import time
 import zipfile
 from xml.etree import ElementTree
 
@@ -118,10 +120,7 @@ def prepare_document(upload):
             "Formato não aceito para \"{}\". Envie arquivos PDF, DOC ou DOCX.".format(filename)
         )
 
-    return {"text": "\n\n[Conteúdo do arquivo: {}]\n{}".format(filename, text)}
-
-
-def call_gemini(message, conversation, documents):
+    return {"text": "\n\n[Conteúdo do arquivo: {}]\n{}".def call_gemini(message, conversation, documents):
     if not API_KEY:
         raise RuntimeError(
             "A chave da API não está configurada. Defina a variável de ambiente GEMINI_API_KEY no backend."
@@ -140,54 +139,147 @@ def call_gemini(message, conversation, documents):
         "generationConfig": {"temperature": 0.4, "maxOutputTokens": 4096},
     }
     encoded_payload = json.dumps(payload).encode("utf-8")
-    retryable_statuses = {400, 404, 429, 500, 502, 503, 504}
+
+    # Repete erros temporários com espera exponencial.
+    # Erros de autenticação não melhoram ao trocar de modelo.
+    retryable_statuses = {408, 429, 500, 502, 503, 504}
+    authentication_statuses = {401, 403}
+
+    try:
+        max_retries = int(os.environ.get("GEMINI_MODEL_RETRIES", "2"))
+    except ValueError:
+        max_retries = 2
+    max_retries = max(0, min(max_retries, 3))
+
+    try:
+        request_timeout = float(os.environ.get("GEMINI_REQUEST_TIMEOUT_SECONDS", "45"))
+    except ValueError:
+        request_timeout = 45.0
+    request_timeout = max(5.0, min(request_timeout, 90.0))
+
+    try:
+        total_budget = float(os.environ.get("GEMINI_FALLBACK_BUDGET_SECONDS", "240"))
+    except ValueError:
+        total_budget = 240.0
+    total_budget = max(15.0, min(total_budget, 300.0))
+
+    deadline = time.monotonic() + total_budget
     errors = []
 
     for model in MODELS:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent".format(
-            urllib.parse.quote(model, safe="")
-        )
-        http_request = urllib.request.Request(
-            url,
-            data=encoded_payload,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": API_KEY,
-            },
-            method="POST",
-        )
-
-        try:
-            with urllib.request.urlopen(http_request, timeout=90) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            details = error.read().decode("utf-8", errors="replace")
-            try:
-                api_error = json.loads(details).get("error", {}).get("message", details)
-            except ValueError:
-                api_error = details
-            errors.append("{} (HTTP {}): {}".format(model, error.code, api_error))
-            if error.code not in retryable_statuses:
+        for attempt in range(max_retries + 1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                errors.append("Tempo total reservado para fallback esgotado.")
                 break
-            continue
-        except (urllib.error.URLError, TimeoutError) as error:
-            raise RuntimeError("Não foi possível conectar à API Gemini: {}".format(error))
-        except (ValueError, UnicodeDecodeError):
-            raise RuntimeError("A API Gemini retornou uma resposta inválida.")
 
-        candidates = result.get("candidates") or []
-        response_parts = (candidates[0].get("content", {}).get("parts", []) if candidates else [])
-        answer = "\n".join(
-            part.get("text", "") for part in response_parts if isinstance(part.get("text"), str)
-        ).strip()
-        if not answer:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent".format(
+                urllib.parse.quote(model, safe="")
+            )
+            http_request = urllib.request.Request(
+                url,
+                data=encoded_payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": API_KEY,
+                },
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(
+                    http_request,
+                    timeout=min(request_timeout, remaining)
+                ) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+
+            except urllib.error.HTTPError as error:
+                details = error.read().decode("utf-8", errors="replace")
+                try:
+                    api_error = json.loads(details).get("error", {}).get("message", details)
+                except ValueError:
+                    api_error = details
+
+                errors.append("{} (HTTP {}): {}".format(model, error.code, api_error))
+                print(
+                    "[Gemini fallback] {} retornou HTTP {} na tentativa {}.".format(
+                        model, error.code, attempt + 1
+                    ),
+                    flush=True,
+                )
+
+                if error.code in authentication_statuses:
+                    raise RuntimeError(
+                        "A API Gemini recusou a chave ou as permissões (HTTP {}). "
+                        "Confira GEMINI_API_KEY e o acesso do projeto.".format(error.code)
+                    )
+
+                if error.code in retryable_statuses and attempt < max_retries:
+                    retry_after = error.headers.get("Retry-After") if error.headers else None
+                    try:
+                        delay = float(retry_after) if retry_after else 2 ** attempt
+                    except (TypeError, ValueError):
+                        delay = 2 ** attempt
+                    delay = min(max(delay, 0.5), 5.0) + random.uniform(0, 0.35)
+
+                    if deadline - time.monotonic() > delay + 1:
+                        time.sleep(delay)
+                        continue
+
+                # Se este modelo estiver indisponível ou incompatível,
+                # encerra as tentativas dele e avança para o próximo.
+                break
+
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                errors.append("{} (falha de conexão/timeout): {}".format(model, error))
+                print(
+                    "[Gemini fallback] Falha de conexão/timeout em {}; tentando o próximo modelo.".format(model),
+                    flush=True,
+                )
+                break
+
+            except (ValueError, UnicodeDecodeError) as error:
+                errors.append("{} (resposta inválida): {}".format(model, error))
+                print(
+                    "[Gemini fallback] Resposta inválida de {}; tentando o próximo modelo.".format(model),
+                    flush=True,
+                )
+                break
+
+            candidates = result.get("candidates") or []
+            response_parts = (
+                candidates[0].get("content", {}).get("parts", []) if candidates else []
+            )
+            answer = "\n".join(
+                part.get("text", "")
+                for part in response_parts
+                if isinstance(part.get("text"), str)
+            ).strip()
+
+            if answer:
+                print("[Gemini fallback] Resposta obtida com {}.".format(model), flush=True)
+                return answer
+
             block_reason = result.get("promptFeedback", {}).get("blockReason")
             if block_reason:
-                raise RuntimeError("A solicitação foi bloqueada pela API ({}).".format(block_reason))
-            raise RuntimeError("A API Gemini não retornou uma resposta em texto (modelo {}).".format(model))
-        return answer
+                raise RuntimeError(
+                    "A solicitação foi bloqueada pela API ({}).".format(block_reason)
+                )
 
-    raise RuntimeError("Nenhum modelo Gemini da lista funcionou. Tentativas: {}".format(" | ".join(errors)))
+            errors.append("{} (a API não retornou texto)".format(model))
+            print(
+                "[Gemini fallback] {} não retornou texto; tentando o próximo modelo.".format(model),
+                flush=True,
+            )
+            break
+
+        if time.monotonic() >= deadline:
+            break
+
+    raise RuntimeError(
+        "Nenhum modelo Gemini da lista funcionou. Tentativas: {}".format(" | ".join(errors))
+    )
+rmat(" | ".join(errors)))
 
 
 @app.route("/", methods=["GET"])
