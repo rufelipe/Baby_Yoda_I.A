@@ -557,18 +557,18 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
     )
     if conversation_mode:
         prompt += (
-            "\\n\\nESTILO DE CONVERSAÇÃO ATIVO: responda como em um bate-papo ao vivo. "
+            "\n\\nESTILO DE CONVERSAÇÃO ATIVO: responda como em um bate-papo ao vivo. "
             "Seja breve e espontâneo, sem títulos, listas, asteriscos ou leitura de formatação. "
             "Não narre o que está fazendo. Dê espaço para a pessoa continuar falando."
         )
         if voice_accent == "carioca":
             prompt += (
-                "\\nUse um jeito de falar carioca natural e leve, com expressões do Rio apenas "
+                "\nUse um jeito de falar carioca natural e leve, com expressões do Rio apenas "
                 "quando couberem (por exemplo, 'pô' ou 'maneiro'). Evite caricatura e não force gírias."
             )
         elif voice_accent == "baiano":
             prompt += (
-                "\\nUse um jeito de falar baiano natural e acolhedor, com expressões regionais "
+                "\nUse um jeito de falar baiano natural e acolhedor, com expressões regionais "
                 "como 'oxe' ou 'massa' somente quando fizerem sentido. Evite caricatura e não force bordões."
             )
     prompt += (
