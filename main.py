@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import hmac
 import json
 import os
@@ -103,7 +104,7 @@ def image_usage_connection():
 
 def get_image_usage():
     today = time.strftime("%Y-%m-%d", time.gmtime())
-    with image_usage_connection() as connection:
+    with contextlib.closing(image_usage_connection()) as connection:
         row = connection.execute(
             "SELECT count FROM image_usage WHERE usage_date = ?", (today,)
         ).fetchone()
@@ -138,6 +139,7 @@ def release_image_slot():
             "UPDATE image_usage SET count = MAX(0, count - 1) WHERE usage_date = ?",
             (today,),
         )
+        connection.commit()
 
 
 def request_gemini_image(prompt, aspect_ratio):
@@ -147,7 +149,7 @@ def request_gemini_image(prompt, aspect_ratio):
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "responseModalities": ["TEXT", "IMAGE"],
-            "imageConfig": {"aspectRatio": aspect_ratio, "imageSize": "1K"},
+            "imageConfig": {"aspectRatio": aspect_ratio},
         },
     }
     encoded = json.dumps(payload).encode("utf-8")
