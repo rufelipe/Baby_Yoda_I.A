@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import requests
 import time
 import zipfile
 from xml.etree import ElementTree
@@ -118,7 +119,13 @@ def is_image_request(message):
 
 def request_ai_horde_image(prompt, aspect_ratio="1:1"):
     """Envia uma imagem à fila comunitária gratuita e aguarda um worker voluntário."""
+    # A API anônima pode limitar cada lado a aproximadamente 580 px em períodos
+    # de alta demanda. Mantemos todas as proporções dentro desse limite.
     width, height = IMAGE_DIMENSIONS.get(aspect_ratio, IMAGE_DIMENSIONS["1:1"])
+    scale = min(1.0, 576 / max(width, height))
+    width = max(256, int(round(width * scale / 64)) * 64)
+    height = max(256, int(round(height * scale / 64)) * 64)
+
     payload = {
         "prompt": prompt,
         "params": {
@@ -134,26 +141,37 @@ def request_ai_horde_image(prompt, aspect_ratio="1:1"):
         "models": [],
         "shared": False,
     }
-    encoded = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
         "apikey": AI_HORDE_ANONYMOUS_KEY,
         "Client-Agent": AI_HORDE_CLIENT_AGENT,
+        "User-Agent": "Baby-Yoda-IA/1.0 (+https://github.com/rufelipe/Baby_Yoda_I.A)",
     }
-    submit_request = urllib.request.Request(
-        AI_HORDE_BASE_URL + "/generate/async",
-        data=encoded,
-        headers=headers,
-        method="POST",
-    )
+    session = requests.Session()
+    session.headers.update(headers)
+
     try:
-        with urllib.request.urlopen(submit_request, timeout=30) as response:
-            submission = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError("O serviço gratuito de imagens recusou o pedido (HTTP {}): {}".format(error.code, details[:500]))
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
-        raise RuntimeError("Não foi possível conectar ao serviço gratuito de imagens: {}".format(error))
+        submit_response = session.post(
+            AI_HORDE_BASE_URL + "/generate/async",
+            json=payload,
+            timeout=30,
+        )
+        if submit_response.status_code == 403 and "1010" in submit_response.text:
+            raise RuntimeError(
+                "A proteção Cloudflare do serviço gratuito bloqueou a conexão do servidor "
+                "(erro 1010). Não é uma falha na sua senha. Tente novamente mais tarde."
+            )
+        submit_response.raise_for_status()
+        submission = submit_response.json()
+    except requests.RequestException as error:
+        details = ""
+        if getattr(error, "response", None) is not None:
+            details = error.response.text[:400]
+        raise RuntimeError(
+            "Não foi possível enviar o pedido ao serviço gratuito de imagens: {} {}".format(error, details)
+        )
+    except ValueError as error:
+        raise RuntimeError("O serviço gratuito retornou uma resposta inválida: {}".format(error))
 
     request_id = submission.get("id")
     if not request_id:
@@ -161,41 +179,46 @@ def request_ai_horde_image(prompt, aspect_ratio="1:1"):
 
     deadline = time.monotonic() + 220
     while time.monotonic() < deadline:
-        time.sleep(2)
-        check_request = urllib.request.Request(
-            AI_HORDE_BASE_URL + "/generate/check/" + urllib.parse.quote(str(request_id), safe=""),
-            headers={"apikey": AI_HORDE_ANONYMOUS_KEY, "Client-Agent": AI_HORDE_CLIENT_AGENT},
-            method="GET",
-        )
+        time.sleep(3)
         try:
-            with urllib.request.urlopen(check_request, timeout=20) as response:
-                status = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
+            status_response = session.get(
+                AI_HORDE_BASE_URL + "/generate/check/" + urllib.parse.quote(str(request_id), safe=""),
+                timeout=20,
+            )
+            status_response.raise_for_status()
+            status = status_response.json()
+        except (requests.RequestException, ValueError) as error:
             app.logger.warning("Falha consultando fila AI Horde: %s", error)
             continue
 
         if status.get("faulted"):
             raise RuntimeError("O serviço comunitário não conseguiu processar a imagem. Tente novamente.")
         if status.get("done"):
-            result_request = urllib.request.Request(
-                AI_HORDE_BASE_URL + "/generate/status/" + urllib.parse.quote(str(request_id), safe=""),
-                headers={"apikey": AI_HORDE_ANONYMOUS_KEY, "Client-Agent": AI_HORDE_CLIENT_AGENT},
-                method="GET",
-            )
-            with urllib.request.urlopen(result_request, timeout=30) as response:
-                result = json.loads(response.read().decode("utf-8"))
+            try:
+                result_response = session.get(
+                    AI_HORDE_BASE_URL + "/generate/status/" + urllib.parse.quote(str(request_id), safe=""),
+                    timeout=30,
+                )
+                result_response.raise_for_status()
+                result = result_response.json()
+            except (requests.RequestException, ValueError) as error:
+                raise RuntimeError("Não foi possível recuperar a imagem pronta: {}".format(error))
+
             generations = result.get("generations") or []
             image_url = generations[0].get("img") if generations else None
             if not image_url:
                 raise RuntimeError("A fila terminou, mas não retornou uma imagem.")
-            image_request = urllib.request.Request(
-                image_url,
-                headers={"User-Agent": "Baby-Yoda-IA/1.0"},
-                method="GET",
-            )
-            with urllib.request.urlopen(image_request, timeout=45) as response:
-                image_bytes = response.read()
-                mime_type = response.headers.get_content_type() or "image/png"
+            try:
+                image_response = requests.get(
+                    image_url,
+                    headers={"User-Agent": headers["User-Agent"]},
+                    timeout=45,
+                )
+                image_response.raise_for_status()
+                image_bytes = image_response.content
+                mime_type = image_response.headers.get("Content-Type", "image/png").split(";")[0]
+            except requests.RequestException as error:
+                raise RuntimeError("A imagem foi gerada, mas não pôde ser baixada: {}".format(error))
             if not mime_type.startswith("image/") or not image_bytes:
                 raise RuntimeError("O serviço retornou um arquivo que não parece ser uma imagem.")
             return {
