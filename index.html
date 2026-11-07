@@ -1219,17 +1219,6 @@
 
       .image-generator { margin: 10px 0 14px; }
       .image-toggle { border: 1px solid var(--border-color); border-radius: 10px; padding: 9px 14px; background: var(--assistant-message); color: var(--text-color); cursor: pointer; font: inherit; }
-      .image-panel { margin-top: 10px; padding: 14px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--panel-background); }
-      .image-panel[hidden] { display: none; }
-      .image-panel > label, .image-controls > label { display: block; margin-bottom: 6px; font-size: .9rem; font-weight: 600; }
-      #image-prompt { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--border-color); border-radius: 9px; padding: 10px; background: var(--page-background); color: var(--text-color); font: inherit; box-sizing: border-box; }
-      .image-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 10px; }
-      .image-controls select { min-height: 38px; border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 9px; background: var(--page-background); color: var(--text-color); }
-      #generate-image { min-height: 38px; border: 0; border-radius: 8px; padding: 8px 14px; background: var(--brand-color); color: white; cursor: pointer; font: inherit; }
-      #generate-image:disabled { opacity: .55; cursor: wait; }
-      .image-usage, .image-disclaimer { margin: 9px 0 0; color: var(--muted-color); font-size: .82rem; }
-      .image-result { max-width: 100%; }
-      .image-result img { display: block; width: 100%; max-width: 760px; height: auto; margin-top: 10px; border-radius: 10px; }
       .image-download { display: inline-block; margin-top: 9px; color: var(--brand-color); font-weight: 600; }
       @media (max-width: 600px) { .image-controls { align-items: stretch; } .image-controls select, #generate-image { flex: 1 1 100%; } }
   
@@ -1359,34 +1348,11 @@
         <form id="chat-form">
           <div class="composer-row">
 
-            <textarea id="prompt" placeholder="Digite sua pergunta ou fale pelo microfone..." aria-label="Sua pergunta sobre os arquivos"></textarea>
+            <textarea id="prompt" placeholder="Pergunte algo, peça uma imagem ou fale pelo microfone..." aria-label="Sua mensagem"></textarea>
             <button class="voice-record" id="voice-record" type="button" aria-label="Começar pergunta por voz" title="Perguntar por voz">🎙️</button>
             <button id="send" type="submit">Enviar</button>
           </div>
         </form>
-        <section class="image-generator" aria-label="Gerador de imagens">
-          <button class="image-toggle" id="toggle-image-panel" type="button" aria-expanded="false">🎨 Criar imagem</button>
-          <div class="image-panel" id="image-panel" hidden>
-            <label for="image-prompt">Descreva a imagem que deseja criar</label>
-            <textarea id="image-prompt" maxlength="4000" placeholder="Ex.: Um dragão negro voando sobre um castelo medieval ao pôr do sol, arte cinematográfica..."></textarea>
-            <div class="image-controls">
-              <label for="image-ratio">Formato</label>
-              <select id="image-ratio">
-                <option value="1:1">Quadrado (1:1)</option>
-                <option value="16:9">Paisagem (16:9)</option>
-                <option value="9:16">Retrato (9:16)</option>
-                <option value="4:3">Paisagem (4:3)</option>
-                <option value="3:4">Retrato (3:4)</option>
-                <option value="3:2">Horizontal (3:2)</option>
-                <option value="2:3">Vertical (2:3)</option>
-                <option value="21:9">Ultrawide (21:9)</option>
-              </select>
-              <button id="generate-image" type="button">Gerar imagem</button>
-            </div>
-            <p class="image-usage" id="image-usage" aria-live="polite">Limite configurado: 100 imagens por dia (sujeito à cota da API Gemini).</p>
-            <p class="image-disclaimer">As imagens são geradas em 1K. A disponibilidade depende da cota e do faturamento da API Gemini.</p>
-          </div>
-        </section>
         <!-- Créditos de desenvolvimento e autoria do projeto. -->
         <footer class="credits-footer">
           <p><strong>Desenvolvido por:</strong> Gabriela Libarino &amp; Rudson Moreira</p>
@@ -1548,12 +1514,6 @@
 
       const addFilesButton = document.querySelector("#add-files");
       const addAudioButton = document.querySelector("#add-audio");
-      const imagePanel = document.querySelector("#image-panel");
-      const toggleImagePanel = document.querySelector("#toggle-image-panel");
-      const imagePromptInput = document.querySelector("#image-prompt");
-      const imageRatioSelect = document.querySelector("#image-ratio");
-      const generateImageButton = document.querySelector("#generate-image");
-      const imageUsageLabel = document.querySelector("#image-usage");
       const fileList = document.querySelector("#file-list");
       const selectAllCheckbox = document.querySelector("#select-all");
       const selectedCount = document.querySelector("#selected-count");
@@ -1909,89 +1869,6 @@
       addFilesButton.addEventListener("click", () => fileInput.click());
       addAudioButton.addEventListener("click", () => audioInput.click());
 
-      async function refreshImageUsage(password) {
-        try {
-          const response = await fetch("/imagem/status", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ access_password: password })
-          });
-          const data = await response.json().catch(() => ({}));
-          if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
-          if (!response.ok) throw new Error(data.error || "Não foi possível consultar a cota.");
-          imageUsageLabel.textContent = `Imagens hoje (UTC): ${data.used} de ${data.limit} usadas · ${data.remaining} restantes.`;
-        } catch (error) {
-          imageUsageLabel.textContent = error.message;
-        }
-      }
-
-      toggleImagePanel.addEventListener("click", async () => {
-        imagePanel.hidden = !imagePanel.hidden;
-        toggleImagePanel.setAttribute("aria-expanded", String(!imagePanel.hidden));
-        if (!imagePanel.hidden) {
-          const password = await getAccessPassword();
-          if (password) refreshImageUsage(password);
-          imagePromptInput.focus();
-        }
-      });
-
-      generateImageButton.addEventListener("click", async () => {
-        const prompt = imagePromptInput.value.trim();
-        if (!prompt) {
-          imagePromptInput.focus();
-          imageUsageLabel.textContent = "Escreva uma descrição para gerar a imagem.";
-          return;
-        }
-        const password = await getAccessPassword();
-        if (!password) return;
-
-        generateImageButton.disabled = true;
-        generateImageButton.textContent = "Gerando...";
-        imageUsageLabel.textContent = "Criando sua imagem. Isso pode levar alguns instantes...";
-        try {
-          const response = await fetch("/gerar-imagem", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              access_password: password,
-              prompt,
-              aspect_ratio: imageRatioSelect.value
-            })
-          });
-          const data = await response.json().catch(() => ({}));
-          if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
-          if (!response.ok) {
-            if (typeof data.used === "number") {
-              imageUsageLabel.textContent = `Imagens hoje (UTC): ${data.used} de ${data.limit} usadas · ${data.remaining} restantes.`;
-            }
-            throw new Error(data.error || `Falha HTTP ${response.status}`);
-          }
-
-          const result = document.createElement("div");
-          result.className = "message assistant image-result";
-          const caption = document.createElement("p");
-          caption.textContent = data.description || "Imagem criada a partir do seu pedido:";
-          const image = document.createElement("img");
-          image.src = data.image;
-          image.alt = prompt;
-          const download = document.createElement("a");
-          download.className = "image-download";
-          download.href = data.image;
-          download.download = "baby-yoda-imagem-" + Date.now() + ".png";
-          download.textContent = "⬇ Baixar imagem";
-          result.append(caption, image, download);
-          messages.append(result);
-          messages.scrollTop = messages.scrollHeight;
-          imageUsageLabel.textContent = `Imagens hoje (UTC): ${data.used} de ${data.limit} usadas · ${data.remaining} restantes.`;
-          imagePromptInput.value = "";
-        } catch (error) {
-          imageUsageLabel.textContent = error.message;
-        } finally {
-          generateImageButton.disabled = false;
-          generateImageButton.textContent = "Gerar imagem";
-        }
-      });
-
       // Atualiza a lista de documentos/áudios, as caixas de seleção e os contadores.
       function renderSources() {
         fileList.replaceChildren();
@@ -2135,10 +2012,6 @@
         const selectedSources = sources.filter((source) => source.included);
         const hasSelectedAudio = selectedSources.some((source) => source.kind === "audio");
         const questionWasRecorded = selectedSources.some((source) => source.temporary);
-        if (!selectedSources.length) {
-          addMessage("Adicione e selecione pelo menos um documento ou áudio.", "assistant", true);
-          return;
-        }
         if (!message && !hasSelectedAudio) {
           addMessage("Digite uma pergunta ou envie um áudio com a pergunta falada.", "assistant", true);
           return;
@@ -2210,6 +2083,26 @@
           }
           // Troca o aviso temporário pela resposta da IA.
           pending.textContent = answer;
+
+          // Se o pedido foi de imagem, mostra o resultado diretamente na conversa.
+          if (typeof data.image === "string" && data.image.startsWith("data:image/")) {
+            const generatedImage = document.createElement("img");
+            generatedImage.className = "generated-chat-image";
+            generatedImage.src = data.image;
+            generatedImage.alt = message || "Imagem gerada pelo Baby Yoda I.A.";
+            generatedImage.style.display = "block";
+            generatedImage.style.width = "100%";
+            generatedImage.style.maxWidth = "760px";
+            generatedImage.style.height = "auto";
+            generatedImage.style.marginTop = "12px";
+            generatedImage.style.borderRadius = "10px";
+            const downloadImage = document.createElement("a");
+            downloadImage.className = "image-download";
+            downloadImage.href = data.image;
+            downloadImage.download = "baby-yoda-imagem-" + Date.now() + ".png";
+            downloadImage.textContent = "⬇ Baixar imagem";
+            pending.append(generatedImage, downloadImage);
+          }
 
           // Disponibiliza a resposta falada usando a voz instalada no navegador.
           const speakButton = document.createElement("button");
