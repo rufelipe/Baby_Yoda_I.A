@@ -1662,6 +1662,8 @@
             renderSources();
             voiceRecordButton.disabled = false;
             voiceRecordButton.textContent = "🎙️";
+            voiceRecordButton.setAttribute("aria-label", "Começar pergunta por voz");
+            voiceRecordButton.title = "Perguntar por voz";
             form.requestSubmit();
           });
 
