@@ -1315,12 +1315,9 @@
                       <option value="calma">🧘 Pessoa calma — suave e tranquila</option>
                     </select>
                   </label>
-                  <label for="voice-accent">Sotaque / variante
+                  <label for="voice-accent">Idioma / sotaque
                     <select id="voice-accent">
                       <option value="brasil">🇧🇷 Português do Brasil</option>
-                      <option value="carioca">🌴 Carioca / Rio de Janeiro</option>
-                      <option value="mineiro">⛰️ Mineiro — aproximação</option>
-                      <option value="baiano">🌴 Baiano / Bahia</option>
                       <option value="portugal">🇵🇹 Português de Portugal</option>
                     </select>
                   </label>
@@ -1329,7 +1326,7 @@
                   </label>
                   <p class="voice-help voice-request-help">O YODA só fala quando você pedir explicitamente na pergunta, seja por texto ou por áudio. Enviar uma pergunta pelo microfone não ativa a voz automaticamente.</p>
                   <button class="voice-preview" id="voice-preview" type="button">▶ Testar voz selecionada</button>
-                  <p class="voice-help">O YODA usa voz neural. Carioca e baiano recebem ajustes de pronúncia, ritmo e expressões naturais; são aproximações regionais, pois o serviço não oferece vozes nativas separadas para cada região. Você pode abrir a engrenagem e mudar o sotaque durante a conversa; a próxima resposta falada já usará a nova escolha.</p>
+                  <p class="voice-help">Escolha entre português do Brasil e português de Portugal. Você pode abrir a engrenagem e alterar a voz durante a conversa; a próxima resposta falada já usará a nova escolha.</p>
                 </section>
                 <button class="feedback-option" id="open-history" type="button">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -1636,7 +1633,7 @@
           const saved = JSON.parse(localStorage.getItem(VOICE_SETTINGS_KEY) || "{}");
           if (saved && typeof saved === "object") {
             if (VOICE_PROFILES[saved.style]) voiceStyleSelect.value = saved.style;
-            if (["brasil", "portugal", "carioca", "mineiro", "baiano"].includes(saved.accent)) voiceAccentSelect.value = saved.accent;
+            if (["brasil", "portugal"].includes(saved.accent)) voiceAccentSelect.value = saved.accent;
             if (typeof saved.speed === "number") voiceSpeedInput.value = String(Math.min(1.4, Math.max(0.7, saved.speed)));
           }
         } catch (error) {}
