@@ -1359,6 +1359,113 @@
         }
       }
 
+    
+      /* Ajustes visuais solicitados: somente logo e botões; dimensões dos painéis preservadas. */
+      .brand-title {
+        display: flex;
+        align-items: center;
+        gap: 0;
+      }
+
+      .brand-logo {
+        display: block;
+        width: 120px;
+        height: 60px;
+        object-fit: contain;
+      }
+
+      .brand-title .visually-hidden,
+      .theme-label {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+      }
+
+      .theme-toggle {
+        display: grid;
+        position: relative;
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        border: 0;
+        border-radius: 50%;
+        background: var(--brand-color);
+        color: #fff;
+        text-align: center;
+      }
+
+      .theme-icon {
+        display: grid;
+        position: static;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        background: transparent;
+        color: #fff;
+        transform: none !important;
+      }
+
+      .theme-toggle[aria-pressed="true"] .theme-icon {
+        transform: none !important;
+      }
+
+      #send,
+      #voice-record {
+        display: grid;
+        width: 48px;
+        min-width: 48px;
+        height: 48px;
+        flex: 0 0 48px;
+        padding: 0;
+        place-items: center;
+        border: 0;
+        border-radius: 50%;
+        background: var(--brand-color);
+        color: #fff;
+      }
+
+      #send svg,
+      #voice-record svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      #send:hover:not(:disabled),
+      #voice-record:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 7px 18px #173c3040;
+      }
+
+      @media (max-width: 680px) {
+        .brand-logo {
+          width: 120px;
+          height: 60px;
+        }
+
+        .theme-toggle {
+          width: 36px;
+          min-width: 36px;
+          height: 36px;
+        }
+
+        #send,
+        #voice-record {
+          width: 42px;
+          min-width: 42px;
+          height: 42px;
+          flex-basis: 42px;
+        }
+      }
+
     </style>
   </head>
   <body>
@@ -1398,15 +1505,9 @@
           <!-- Altere o título e a descrição para personalizar a apresentação. -->
           <div>
             <div class="brand-title">
-              <span class="brand-character">
-                <img class="brand-logo" src="./logo-yoda.png" alt="Logo do YODA">
-                <span class="character-eyelid left" aria-hidden="true"></span>
-                <span class="character-eyelid right" aria-hidden="true"></span>
-                <span class="character-mouth" aria-hidden="true"></span>
-              </span>
-              <h1>YODA</h1>
+              <img class="brand-logo" src="./logo-yoda.png" alt="Logo do YODA">
+              <h1 class="visually-hidden">YODA</h1>
             </div>
-            <p></p>
           </div>
           <div class="header-actions">
             <!-- Engrenagem que mostra as opções disponíveis do assistente. -->
