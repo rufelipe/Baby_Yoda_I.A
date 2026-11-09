@@ -1361,43 +1361,21 @@
 
     
       /* Ajustes visuais solicitados: somente logo e botões; dimensões dos painéis preservadas. */
-      /* Logo em composição vertical: personagem acima do nome YODA. */
+      /* Mantém a composição original da marca, antes do ajuste vertical. */
       .brand-title {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 0;
-        text-align: center;
+        gap: 9px;
       }
 
       .brand-logo {
         display: block;
-        width: 76px;
-        height: 58px;
+        width: 120px;
+        height: 60px;
         object-fit: contain;
-        margin: 0 auto -2px;
       }
 
-      .brand-title h1 {
-        position: static;
-        display: block;
-        width: auto;
-        height: auto;
-        margin: 0;
-        padding: 0;
-        overflow: visible;
-        clip: auto;
-        white-space: nowrap;
-        border: 0;
-        color: var(--text-color);
-        font-size: 19px;
-        font-weight: 800;
-        line-height: 1;
-        letter-spacing: 3px;
-        text-align: center;
-      }
-
+      .brand-title .visually-hidden,
       .theme-label {
         position: absolute !important;
         width: 1px !important;
@@ -1470,12 +1448,8 @@
 
       @media (max-width: 680px) {
         .brand-logo {
-          width: 68px;
-          height: 52px;
-        }
-
-        .brand-title h1 {
-          font-size: 17px;
+          width: 120px;
+          height: 60px;
         }
 
         .theme-toggle {
