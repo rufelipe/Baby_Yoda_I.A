@@ -351,7 +351,7 @@ def synthesize_voice(text, profile_name="calma", accent="brasil", speed=1.0):
     except (TypeError, ValueError):
         speed = 1.0
     speed = max(0.7, min(1.4, speed))
-    base_rate_match = re.match(r"[+-]?\\d+", rate)
+    base_rate_match = re.match(r"[+-]?\d+", rate)
     base_rate = int(base_rate_match.group(0)) if base_rate_match else 0
     effective_rate = round(base_rate + ((speed - 1.0) * 100))
     effective_rate = max(-50, min(50, effective_rate))
