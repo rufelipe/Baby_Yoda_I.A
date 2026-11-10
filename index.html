@@ -1874,6 +1874,37 @@
         try { localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings)); } catch (error) {}
       }
 
+      function textRequestsAudio(text) {
+        const normalized = String(text || "")
+          .normalize("NFD")
+          .replace(/[\\u0300-\\u036f]/g, "")
+          .replace(/\\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        if (!normalized) return false;
+        const explicitPhrases = [
+          "em audio",
+          "por audio",
+          "responda em audio",
+          "responda por audio",
+          "responda falando",
+          "me responda falando",
+          "quero ouvir a resposta",
+          "quero ouvir sua resposta",
+          "quero ouvir",
+          "pode falar a resposta",
+          "fale a resposta",
+          "fale para mim",
+          "leia a resposta",
+          "leia para mim",
+          "responda oralmente",
+          "resposta falada",
+          "so audio",
+          "somente audio"
+        ];
+        return explicitPhrases.some((phrase) => normalized.includes(phrase));
+      }
+
       function prepareSpokenAnswer(text) {
         return String(text || "")
           .replace(/\x60{3}[\s\S]*?\x60{3}/g, " ")
@@ -2425,7 +2456,11 @@
 
           // Só gera voz quando houver pedido explícito de resposta em áudio.
           // Isso vale para pedidos escritos e para pedidos identificados no áudio da pergunta.
-          const shouldSpeak = data.speak_audio === true || (conversationMode && !textRequestsConversationStop(message));
+          const shouldSpeak =
+            data.speak_audio === true ||
+            textRequestsAudio(requestMessage) ||
+            (conversationMode && !textRequestsConversationStop(requestMessage));
+
           if (shouldSpeak) {
             const speakButton = document.createElement("button");
             speakButton.type = "button";
@@ -2436,7 +2471,19 @@
 
             const ok = await speakAnswer(answer);
             speakButton.disabled = false;
-            speakButton.textContent = ok ? "🔊 Reproduzir novamente" : "⚠ Tentar voz novamente";
+            speakButton.textContent = ok
+              ? "🔊 Reproduzir novamente"
+              : "⚠ Reproduzir resposta";
+
+            speakButton.addEventListener("click", async () => {
+              speakButton.disabled = true;
+              speakButton.textContent = "🔊 Gerando áudio...";
+              const replayOk = await speakAnswer(answer);
+              speakButton.disabled = false;
+              speakButton.textContent = replayOk
+                ? "🔊 Reproduzir novamente"
+                : "⚠ Tentar voz novamente";
+            });
           }
         } catch (error) {
           // Exibe uma orientação se a API não responder ou retornar dados inesperados.
