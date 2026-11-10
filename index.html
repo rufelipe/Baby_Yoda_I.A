@@ -1877,8 +1877,8 @@
       function textRequestsAudio(text) {
         const normalized = String(text || "")
           .normalize("NFD")
-          .replace(/[\\u0300-\\u036f]/g, "")
-          .replace(/\\s+/g, " ")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\s+/g, " ")
           .trim()
           .toLowerCase();
         if (!normalized) return false;
@@ -1900,7 +1900,12 @@
           "responda oralmente",
           "resposta falada",
           "so audio",
-          "somente audio"
+          "somente audio",
+          "em voz",
+          "por voz",
+          "fale",
+          "audio",
+          "voz"
         ];
         return explicitPhrases.some((phrase) => normalized.includes(phrase));
       }
@@ -1922,6 +1927,27 @@
           .replace(/<[^>]+>/g, " ")
           .replace(/\s+/g, " ")
           .trim();
+      }
+
+      let lastGeneratedVoiceData = "";
+
+      function playGeneratedVoice() {
+        if (!lastGeneratedVoiceData) return false;
+        try {
+          if (currentVoiceAudio) {
+            currentVoiceAudio.pause();
+            currentVoiceAudio.currentTime = 0;
+          }
+          currentVoiceAudio = new Audio(lastGeneratedVoiceData);
+          const playPromise = currentVoiceAudio.play();
+          if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch((error) => console.error("Falha ao reproduzir voz:", error));
+          }
+          return true;
+        } catch (error) {
+          console.error("Falha ao reproduzir voz:", error);
+          return false;
+        }
       }
 
       async function speakAnswer(text) {
@@ -1954,9 +1980,8 @@
           if (typeof data.audio !== "string" || !data.audio.startsWith("data:audio/")) {
             throw new Error("O servidor não retornou um áudio válido.");
           }
-          currentVoiceAudio = new Audio(data.audio);
-          await currentVoiceAudio.play();
-          return true;
+          lastGeneratedVoiceData = data.audio;
+          return playGeneratedVoice();
         } catch (error) {
           console.error("Falha na síntese de voz:", error);
           return false;
@@ -2476,11 +2501,16 @@
               : "⚠ Reproduzir resposta";
 
             speakButton.addEventListener("click", async () => {
+              const replayOk = playGeneratedVoice();
+              if (replayOk) {
+                speakButton.textContent = "🔊 Reproduzir novamente";
+                return;
+              }
               speakButton.disabled = true;
               speakButton.textContent = "🔊 Gerando áudio...";
-              const replayOk = await speakAnswer(answer);
+              const generatedOk = await speakAnswer(answer);
               speakButton.disabled = false;
-              speakButton.textContent = replayOk
+              speakButton.textContent = generatedOk
                 ? "🔊 Reproduzir novamente"
                 : "⚠ Tentar voz novamente";
             });
