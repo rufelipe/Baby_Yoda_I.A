@@ -334,7 +334,7 @@ def apply_regional_pronunciation(text, accent):
     return text
 
 
-def synthesize_voice(text, profile_name="calma", accent="brasil"):
+def synthesize_voice(text, profile_name="calma", accent="brasil", speed=1.0):
     """Gera MP3 com voz neural gratuita via Edge TTS, sem chave de API."""
     accent = ACCENT_ALIASES.get(str(accent or "brasil").strip().casefold(), "brasil")
     profile = VOICE_PROFILES.get(profile_name, VOICE_PROFILES["calma"])
@@ -346,6 +346,16 @@ def synthesize_voice(text, profile_name="calma", accent="brasil"):
     clean_text = apply_regional_pronunciation(clean_text[:12000], accent)
     rate = profile["rate"]
     pitch = profile["pitch"]
+    try:
+        speed = float(speed)
+    except (TypeError, ValueError):
+        speed = 1.0
+    speed = max(0.7, min(1.4, speed))
+    base_rate_match = re.match(r"[+-]?\\d+", rate)
+    base_rate = int(base_rate_match.group(0)) if base_rate_match else 0
+    effective_rate = round(base_rate + ((speed - 1.0) * 100))
+    effective_rate = max(-50, min(50, effective_rate))
+    rate = "{}%".format(effective_rate)
     if accent == "baiano":
         rate_match = re.match(r"[+-]?\d+", rate)
         pitch_match = re.match(r"[+-]?\d+", pitch)
@@ -395,8 +405,13 @@ def sintetizar_voz():
         return jsonify({"error": "Perfil de voz não reconhecido."}), 400
     if accent not in ACCENT_LOCALES:
         return jsonify({"error": "Sotaque/variante de português não reconhecido."}), 400
+    speed = data.get("speed", 1.0)
     try:
-        audio_bytes = synthesize_voice(text, profile, accent)
+        speed = max(0.7, min(1.4, float(speed)))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Velocidade de voz inválida."}), 400
+    try:
+        audio_bytes = synthesize_voice(text, profile, accent, speed)
         return jsonify({
             "audio": "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("ascii"),
             "profile": profile,
