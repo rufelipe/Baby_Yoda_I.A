@@ -414,15 +414,33 @@ def sintetizar_voz():
         return jsonify({"error": "Velocidade de voz inválida."}), 400
     try:
         audio_bytes = synthesize_voice(text, profile, accent, speed)
+        selected_voice = (
+            VOICE_PROFILES[profile]["voice"]
+            if accent == "brasil"
+            else PORTUGAL_VOICE_FALLBACKS.get(profile, "pt-PT-RaquelNeural")
+        )
+
+        # Para o player, devolvemos o MP3 diretamente. O frontend não precisa
+        # converter base64 nem montar um data URL, reduzindo falhas de decodificação.
+        requested_format = str(data.get("format", "json")).strip().lower()
+        if requested_format == "mp3":
+            from io import BytesIO
+            response = app.response_class(
+                audio_bytes,
+                mimetype="audio/mpeg",
+                direct_passthrough=True,
+            )
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Voice-Profile"] = profile
+            response.headers["X-Voice-Name"] = selected_voice
+            response.headers["X-Voice-Accent"] = accent
+            return response
+
         return jsonify({
             "audio": "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("ascii"),
             "profile": profile,
             "accent": accent,
-            "voice": (
-                VOICE_PROFILES[profile]["voice"]
-                if accent == "brasil"
-                else PORTUGAL_VOICE_FALLBACKS.get(profile, "pt-PT-RaquelNeural")
-            ),
+            "voice": selected_voice,
         })
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
