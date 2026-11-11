@@ -1931,7 +1931,7 @@
 
       let lastGeneratedVoiceData = "";
 
-      function playGeneratedVoice() {
+      async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
           if (currentVoiceAudio) {
@@ -1939,15 +1939,35 @@
             currentVoiceAudio.currentTime = 0;
           }
           currentVoiceAudio = new Audio(lastGeneratedVoiceData);
-          const playPromise = currentVoiceAudio.play();
-          if (playPromise && typeof playPromise.catch === "function") {
-            playPromise.catch((error) => console.error("Falha ao reproduzir voz:", error));
-          }
+          currentVoiceAudio.preload = "auto";
+          await currentVoiceAudio.play();
           return true;
         } catch (error) {
-          console.error("Falha ao reproduzir voz:", error);
+          console.error("Falha ao reproduzir áudio neural:", error);
           return false;
         }
+      }
+
+      function speakWithBrowserVoice(text) {
+        return new Promise((resolve) => {
+          try {
+            if (!("speechSynthesis" in window)) {
+              resolve(false);
+              return;
+            }
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(prepareSpokenAnswer(text));
+            utterance.lang = voiceAccentSelect.value === "portugal" ? "pt-PT" : "pt-BR";
+            utterance.rate = Math.max(0.7, Math.min(1.4, Number(voiceSpeedInput.value) || 1));
+            utterance.pitch = 1;
+            utterance.onend = () => resolve(true);
+            utterance.onerror = () => resolve(false);
+            window.speechSynthesis.speak(utterance);
+          } catch (error) {
+            console.error("Falha na voz do navegador:", error);
+            resolve(false);
+          }
+        });
       }
 
       async function speakAnswer(text) {
@@ -1955,11 +1975,13 @@
         if (!spokenText) return false;
         const accessPassword = sessionStorage.getItem(ACCESS_PASSWORD_KEY);
         if (!accessPassword) return false;
+
         try {
           if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
+
           const response = await fetch(VOICE_API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1971,20 +1993,33 @@
               access_password: accessPassword
             })
           });
+
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
             throw new Error(errorData.error || "Não foi possível gerar o áudio.");
           }
+
           const data = await response.json();
           if (typeof data.audio !== "string" || !data.audio.startsWith("data:audio/")) {
             throw new Error("O servidor não retornou um áudio válido.");
           }
+
           lastGeneratedVoiceData = data.audio;
-          return playGeneratedVoice();
+
+          // O navegador pode bloquear autoplay depois do fetch. Se isso acontecer,
+          // usa a voz nativa do navegador para que o pedido explícito de áudio
+          // continue funcionando.
+          if (await playGeneratedVoice()) {
+            return true;
+          }
+
+          return await speakWithBrowserVoice(spokenText);
         } catch (error) {
-          console.error("Falha na síntese de voz:", error);
-          return false;
+          console.error("Falha na síntese de voz neural:", error);
+          // Mesmo que o Edge TTS/API esteja indisponível, um pedido explícito
+          // de voz deve continuar sendo falado pelo navegador.
+          return await speakWithBrowserVoice(spokenText);
         }
       }
 
@@ -2501,7 +2536,7 @@
               : "⚠ Reproduzir resposta";
 
             speakButton.addEventListener("click", async () => {
-              const replayOk = playGeneratedVoice();
+              const replayOk = await playGeneratedVoice();
               if (replayOk) {
                 speakButton.textContent = "🔊 Reproduzir novamente";
                 return;
