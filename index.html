@@ -1960,19 +1960,40 @@
           if (!currentVoiceAudio) {
             currentVoiceAudio = new Audio();
             currentVoiceAudio.preload = "auto";
+            currentVoiceAudio.playsInline = true;
           } else {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
           currentVoiceAudio.volume = 1;
           currentVoiceAudio.src = lastGeneratedVoiceData;
+          currentVoiceAudio.load();
+
+          // Tenta reproduzir automaticamente. Se o navegador bloquear, o
+          // chamador mantém o áudio disponível para reprodução manual.
           await currentVoiceAudio.play();
           audioPlaybackUnlocked = true;
           return true;
         } catch (error) {
           console.error("Falha ao reproduzir áudio neural:", error);
+          window.__babyYodaVoiceError = error?.name || String(error);
           return false;
         }
+      }
+
+      function appendAudioPlayer(container) {
+        if (!lastGeneratedVoiceData) return null;
+        const audioPlayer = document.createElement("audio");
+        audioPlayer.className = "voice-audio-player";
+        audioPlayer.controls = true;
+        audioPlayer.preload = "auto";
+        audioPlayer.src = lastGeneratedVoiceData;
+        audioPlayer.setAttribute("aria-label", "Resposta em áudio do Baby Yoda");
+        audioPlayer.style.display = "block";
+        audioPlayer.style.width = "100%";
+        audioPlayer.style.marginTop = "10px";
+        container.append(audioPlayer);
+        return audioPlayer;
       }
 
       function getBrowserVoicePreferences() {
@@ -2611,6 +2632,20 @@
               ? "🔊 Reproduzir novamente"
               : "⚠ Reproduzir resposta";
 
+            if (!ok) {
+              appendAudioPlayer(pending);
+              const voiceError = window.__babyYodaVoiceError;
+              const diagnostic = document.createElement("small");
+              diagnostic.className = "voice-diagnostic";
+              diagnostic.textContent = voiceError
+                ? "A voz foi gerada, mas o navegador bloqueou a reprodução automática. Use o botão ▶ do player acima."
+                : "Não foi possível reproduzir a voz. Use o player acima para testar o áudio gerado.";
+              diagnostic.style.display = "block";
+              diagnostic.style.marginTop = "6px";
+              diagnostic.style.color = "var(--muted-color)";
+              pending.append(diagnostic);
+            }
+
             speakButton.addEventListener("click", async () => {
               // Regera o áudio usando a configuração atualmente selecionada.
               // Assim, trocar a personalidade e clicar novamente nunca reutiliza um MP3 antigo.
@@ -2621,6 +2656,11 @@
               speakButton.textContent = generatedOk
                 ? "🔊 Reproduzir novamente"
                 : "⚠ Tentar voz novamente";
+              if (!generatedOk) {
+                const existingPlayer = pending.querySelector(".voice-audio-player");
+                if (existingPlayer) existingPlayer.remove();
+                appendAudioPlayer(pending);
+              }
             });
           }
         } catch (error) {
