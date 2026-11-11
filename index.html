@@ -1814,6 +1814,29 @@
       const VOICE_SETTINGS_KEY = "baby-yoda-voice-settings";
       const VOICE_API_URL = "/sintetizar-voz";
       let currentVoiceAudio = null;
+      // O Chrome pode bloquear áudio iniciado depois de um await/fetch. Para manter
+      // a voz neural sem voltar para a voz robótica do navegador, desbloqueamos a
+      // reprodução durante o clique/envio do usuário e reutilizamos o mesmo elemento.
+      let audioPlaybackUnlocked = false;
+      const SILENT_WAV_DATA = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
+      function unlockAudioPlayback() {
+        try {
+          if (!currentVoiceAudio) {
+            currentVoiceAudio = new Audio(SILENT_WAV_DATA);
+            currentVoiceAudio.preload = "auto";
+            currentVoiceAudio.volume = 0;
+          }
+          const playPromise = currentVoiceAudio.play();
+          if (playPromise && typeof playPromise.then === "function") {
+            playPromise.then(() => {
+              audioPlaybackUnlocked = true;
+            }).catch(() => {});
+          }
+        } catch (error) {
+          console.debug("Não foi possível desbloquear o áudio:", error);
+        }
+      }
       const historyDialog = document.querySelector("#history-dialog");
       const historyList = document.querySelector("#history-list");
       const feedbackDialog = document.querySelector("#feedback-dialog");
@@ -1934,13 +1957,17 @@
       async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
-          if (currentVoiceAudio) {
+          if (!currentVoiceAudio) {
+            currentVoiceAudio = new Audio();
+            currentVoiceAudio.preload = "auto";
+          } else {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          currentVoiceAudio = new Audio(lastGeneratedVoiceData);
-          currentVoiceAudio.preload = "auto";
+          currentVoiceAudio.volume = 1;
+          currentVoiceAudio.src = lastGeneratedVoiceData;
           await currentVoiceAudio.play();
+          audioPlaybackUnlocked = true;
           return true;
         } catch (error) {
           console.error("Falha ao reproduzir áudio neural:", error);
@@ -2085,6 +2112,7 @@
         toggleVoiceSettings.setAttribute("aria-expanded", String(!voiceSettings.hidden));
       });
       voicePreviewButton.addEventListener("click", async () => {
+        unlockAudioPlayback();
         voicePreviewButton.disabled = true;
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
@@ -2461,6 +2489,8 @@
           return;
         }
         const requestMessage = message || "Ouça o áudio anexado, identifique a pergunta falada e responda em português.";
+        // Executa ainda dentro da interação do usuário para evitar bloqueio de autoplay.
+        unlockAudioPlayback();
         if (textRequestsConversationStart(message)) {
           setConversationMode(true);
         } else if (textRequestsConversationStop(message)) {
