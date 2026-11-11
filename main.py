@@ -288,14 +288,14 @@ def wants_audio_response(message):
 
 
 VOICE_PROFILES = {
-    # Cada personalidade aponta para uma voz neural BRASIL diferente.
-    # A identidade da voz vem do campo "voice"; rate/pitch apenas ajustam a interpretação.
-    "sombria": {"voice": "pt-BR-AntonioNeural", "rate": "-10%", "pitch": "-10Hz"},
-    "alegre": {"voice": "pt-BR-GiovannaNeural", "rate": "+8%", "pitch": "+4Hz"},
+    # Cada personalidade usa uma voz neural diferente. Isso evita que a seleção
+    # pareça apenas uma mudança de velocidade/altura quando o navegador reproduz o MP3.
+    "sombria": {"voice": "pt-BR-AntonioNeural", "rate": "-12%", "pitch": "-18Hz"},
+    "alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+8%", "pitch": "+4Hz"},
     "crianca": {"voice": "pt-BR-LeticiaNeural", "rate": "+5%", "pitch": "+12Hz"},
-    "mulher": {"voice": "pt-BR-BrendaNeural", "rate": "0%", "pitch": "0Hz"},
-    "mulher-alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+7%", "pitch": "+4Hz"},
-    "mulher-irritada": {"voice": "pt-BR-ThalitaNeural", "rate": "+6%", "pitch": "+2Hz"},
+    "mulher": {"voice": "pt-BR-YaraNeural", "rate": "0%", "pitch": "0Hz"},
+    "mulher-alegre": {"voice": "pt-BR-GiovannaNeural", "rate": "+7%", "pitch": "+4Hz"},
+    "mulher-irritada": {"voice": "pt-BR-ThalitaNeural", "rate": "+6%", "pitch": "+1Hz"},
     "calma": {"voice": "pt-BR-ManuelaNeural", "rate": "-8%", "pitch": "-2Hz"},
 }
 
@@ -414,33 +414,10 @@ def sintetizar_voz():
         return jsonify({"error": "Velocidade de voz inválida."}), 400
     try:
         audio_bytes = synthesize_voice(text, profile, accent, speed)
-        selected_voice = (
-            VOICE_PROFILES[profile]["voice"]
-            if accent == "brasil"
-            else PORTUGAL_VOICE_FALLBACKS.get(profile, "pt-PT-RaquelNeural")
-        )
-
-        # Para o player, devolvemos o MP3 diretamente. O frontend não precisa
-        # converter base64 nem montar um data URL, reduzindo falhas de decodificação.
-        requested_format = str(data.get("format", "json")).strip().lower()
-        if requested_format == "mp3":
-            from io import BytesIO
-            response = app.response_class(
-                audio_bytes,
-                mimetype="audio/mpeg",
-                direct_passthrough=True,
-            )
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["X-Voice-Profile"] = profile
-            response.headers["X-Voice-Name"] = selected_voice
-            response.headers["X-Voice-Accent"] = accent
-            return response
-
         return jsonify({
             "audio": "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("ascii"),
             "profile": profile,
             "accent": accent,
-            "voice": selected_voice,
         })
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
