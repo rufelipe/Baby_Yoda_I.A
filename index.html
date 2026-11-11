@@ -2040,18 +2040,27 @@
             throw new Error("O servidor não retornou um áudio válido.");
           }
 
-          lastGeneratedVoiceData = data.audio;
-
-          // O navegador pode bloquear autoplay depois do fetch. Se isso acontecer,
-          // usa a voz nativa do navegador para que o pedido explícito de áudio
-          // continue funcionando.
-          if (await playGeneratedVoice()) {
-            return true;
+          // Guarda também a identidade devolvida pelo backend para impedir que
+          // uma resposta de outro perfil seja reutilizada por engano.
+          const requestedProfile = voiceStyleSelect.value;
+          if (data.profile !== requestedProfile) {
+            throw new Error(
+              "O servidor retornou outra personalidade de voz: " +
+              String(data.profile || "desconhecida")
+            );
           }
 
-          // Não troca silenciosamente para uma voz genérica do navegador.
-          // Isso fazia a personalidade escolhida parecer não funcionar.
-          return false;
+          lastGeneratedVoiceData = data.audio;
+          console.info(
+            "Baby Yoda TTS:",
+            "perfil=", data.profile,
+            "voz=", data.voice,
+            "sotaque=", data.accent
+          );
+
+          // O navegador pode bloquear autoplay depois do fetch. Nesse caso não
+          // substituímos o MP3 neural por uma voz robótica do navegador.
+          return await playGeneratedVoice();
         } catch (error) {
           console.error("Falha na síntese de voz neural:", error);
           // Não substitui a voz escolhida por uma voz genérica do navegador.
@@ -2078,9 +2087,6 @@
       voicePreviewButton.addEventListener("click", async () => {
         voicePreviewButton.disabled = true;
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
-        // O clique do usuário é uma interação direta: primeiro tentamos a voz
-        // neural selecionada e, se o navegador bloquear o MP3, usamos a voz
-        // nativa já escolhida para a mesma personalidade.
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
         voicePreviewButton.disabled = false;
         voicePreviewButton.textContent = ok ? "▶ Testar voz selecionada" : "⚠ Tentar novamente";
