@@ -1814,24 +1814,36 @@
       const VOICE_SETTINGS_KEY = "baby-yoda-voice-settings";
       const VOICE_API_URL = "/sintetizar-voz";
       let currentVoiceAudio = null;
-      // O Chrome pode bloquear áudio iniciado depois de um await/fetch. Para manter
-      // a voz neural sem voltar para a voz robótica do navegador, desbloqueamos a
-      // reprodução durante o clique/envio do usuário e reutilizamos o mesmo elemento.
+      let voiceAudioContext = null;
+      let voiceAudioSource = null;
+      // Mantém um AudioContext iniciado pela interação do usuário. Isso evita que
+      // o Chrome descarte a permissão de áudio quando o MP3 neural chega depois do fetch.
       let audioPlaybackUnlocked = false;
       const SILENT_WAV_DATA = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 
-      function unlockAudioPlayback() {
+      async function unlockAudioPlayback() {
         try {
           if (!currentVoiceAudio) {
             currentVoiceAudio = new Audio(SILENT_WAV_DATA);
             currentVoiceAudio.preload = "auto";
             currentVoiceAudio.volume = 0;
           }
+          try {
+            if (!voiceAudioContext) {
+              const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+              if (AudioContextClass) voiceAudioContext = new AudioContextClass();
+            }
+            if (voiceAudioContext) {
+              await voiceAudioContext.resume();
+              audioPlaybackUnlocked = voiceAudioContext.state === "running";
+            }
+          } catch (contextError) {
+            console.debug("Não foi possível iniciar o contexto de áudio:", contextError);
+          }
+
           const playPromise = currentVoiceAudio.play();
           if (playPromise && typeof playPromise.then === "function") {
-            playPromise.then(() => {
-              audioPlaybackUnlocked = true;
-            }).catch(() => {});
+            await playPromise.catch(() => {});
           }
         } catch (error) {
           console.debug("Não foi possível desbloquear o áudio:", error);
@@ -1957,6 +1969,35 @@
       async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
+          // Primeira opção: Web Audio API com o contexto já iniciado pelo clique.
+          // O MP3 continua sendo exatamente o áudio neural retornado pelo Edge TTS.
+          if (voiceAudioContext) {
+            try {
+              if (voiceAudioContext.state !== "running") {
+                await voiceAudioContext.resume();
+              }
+              const commaIndex = lastGeneratedVoiceData.indexOf(",");
+              const base64 = commaIndex >= 0 ? lastGeneratedVoiceData.slice(commaIndex + 1) : "";
+              const binary = atob(base64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const audioBuffer = await voiceAudioContext.decodeAudioData(bytes.buffer.slice(0));
+              if (voiceAudioSource) {
+                try { voiceAudioSource.stop(); } catch (_) {}
+              }
+              voiceAudioSource = voiceAudioContext.createBufferSource();
+              voiceAudioSource.buffer = audioBuffer;
+              voiceAudioSource.connect(voiceAudioContext.destination);
+              voiceAudioSource.start(0);
+              audioPlaybackUnlocked = true;
+              return true;
+            } catch (contextError) {
+              console.warn("Web Audio não conseguiu reproduzir o MP3 neural:", contextError);
+              window.__babyYodaVoiceError = contextError?.name || String(contextError);
+            }
+          }
+
+          // Fallback: elemento <audio>, mantendo o MP3 neural.
           if (!currentVoiceAudio) {
             currentVoiceAudio = new Audio();
             currentVoiceAudio.preload = "auto";
@@ -1968,9 +2009,6 @@
           currentVoiceAudio.volume = 1;
           currentVoiceAudio.src = lastGeneratedVoiceData;
           currentVoiceAudio.load();
-
-          // Tenta reproduzir automaticamente. Se o navegador bloquear, o
-          // chamador mantém o áudio disponível para reprodução manual.
           await currentVoiceAudio.play();
           audioPlaybackUnlocked = true;
           return true;
