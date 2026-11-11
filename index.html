@@ -1814,41 +1814,6 @@
       const VOICE_SETTINGS_KEY = "baby-yoda-voice-settings";
       const VOICE_API_URL = "/sintetizar-voz";
       let currentVoiceAudio = null;
-      let voiceAudioContext = null;
-      let voiceAudioSource = null;
-      // Mantém um AudioContext iniciado pela interação do usuário. Isso evita que
-      // o Chrome descarte a permissão de áudio quando o MP3 neural chega depois do fetch.
-      let audioPlaybackUnlocked = false;
-      const SILENT_WAV_DATA = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
-
-      async function unlockAudioPlayback() {
-        try {
-          if (!currentVoiceAudio) {
-            currentVoiceAudio = new Audio(SILENT_WAV_DATA);
-            currentVoiceAudio.preload = "auto";
-            currentVoiceAudio.volume = 0;
-          }
-          try {
-            if (!voiceAudioContext) {
-              const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-              if (AudioContextClass) voiceAudioContext = new AudioContextClass();
-            }
-            if (voiceAudioContext) {
-              await voiceAudioContext.resume();
-              audioPlaybackUnlocked = voiceAudioContext.state === "running";
-            }
-          } catch (contextError) {
-            console.debug("Não foi possível iniciar o contexto de áudio:", contextError);
-          }
-
-          const playPromise = currentVoiceAudio.play();
-          if (playPromise && typeof playPromise.then === "function") {
-            await playPromise.catch(() => {});
-          }
-        } catch (error) {
-          console.debug("Não foi possível desbloquear o áudio:", error);
-        }
-      }
       const historyDialog = document.querySelector("#history-dialog");
       const historyList = document.querySelector("#history-list");
       const feedbackDialog = document.querySelector("#feedback-dialog");
@@ -1964,114 +1929,23 @@
           .trim();
       }
 
-      let lastGeneratedVoiceData = null;
-
-      function ensureVoiceAudioContext() {
-        if (!voiceAudioContext) {
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          if (!AudioContextClass) return null;
-          voiceAudioContext = new AudioContextClass();
-        }
-        // resume() is intentionally started without waiting here. The call happens
-        // directly from the user's click/submit interaction, preserving the browser
-        // audio permission while the TTS request is processed.
-        if (voiceAudioContext.state !== "running") {
-          voiceAudioContext.resume().catch((error) => {
-            console.debug("Não foi possível ativar o áudio:", error);
-          });
-        }
-        audioPlaybackUnlocked = voiceAudioContext.state === "running";
-        return voiceAudioContext;
-      }
+      let lastGeneratedVoiceData = "";
 
       async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
-          // O backend entrega o MP3 como Blob. O Web Audio reproduz o mesmo
-          // arquivo neural escolhido, sem depender da voz robótica do navegador.
-          const context = ensureVoiceAudioContext();
-          if (context) {
-            if (context.state !== "running") {
-              await context.resume();
-            }
-            const audioBuffer = await context.decodeAudioData(
-              await lastGeneratedVoiceData.arrayBuffer()
-            );
-            if (voiceAudioSource) {
-              try { voiceAudioSource.stop(); } catch (_) {}
-            }
-            voiceAudioSource = context.createBufferSource();
-            voiceAudioSource.buffer = audioBuffer;
-            voiceAudioSource.connect(context.destination);
-            voiceAudioSource.start(0);
-            audioPlaybackUnlocked = true;
-            return true;
-          }
-
-          if (!currentVoiceAudio) {
-            currentVoiceAudio = new Audio();
-            currentVoiceAudio.preload = "auto";
-            currentVoiceAudio.playsInline = true;
-          } else {
+          if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          currentVoiceAudio.volume = 1;
-          if (currentVoiceAudio.src) URL.revokeObjectURL(currentVoiceAudio.src);
-          currentVoiceAudio.src = URL.createObjectURL(lastGeneratedVoiceData);
-          currentVoiceAudio.load();
+          currentVoiceAudio = new Audio(lastGeneratedVoiceData);
+          currentVoiceAudio.preload = "auto";
           await currentVoiceAudio.play();
-          audioPlaybackUnlocked = true;
           return true;
         } catch (error) {
           console.error("Falha ao reproduzir áudio neural:", error);
-          window.__babyYodaVoiceError = error?.name || String(error);
           return false;
         }
-      }
-
-      function appendAudioPlayer(container) {
-        if (!lastGeneratedVoiceData) return null;
-        const audioPlayer = document.createElement("audio");
-        audioPlayer.className = "voice-audio-player";
-        audioPlayer.controls = true;
-        audioPlayer.preload = "auto";
-        audioPlayer.src = lastGeneratedVoiceData;
-        audioPlayer.setAttribute("aria-label", "Resposta em áudio do Baby Yoda");
-        audioPlayer.style.display = "block";
-        audioPlayer.style.width = "100%";
-        audioPlayer.style.marginTop = "10px";
-        container.append(audioPlayer);
-        return audioPlayer;
-      }
-
-      function getBrowserVoicePreferences() {
-        const profile = voiceStyleSelect.value;
-        const accent = voiceAccentSelect.value;
-        const preferences = {
-          sombria: { names: ["Antonio", "Duarte"], pitch: 0.82, rate: 0.92 },
-          alegre: { names: ["Francisca", "Giovanna", "Raquel"], pitch: 1.08, rate: 1.06 },
-          crianca: { names: ["Leticia", "Fernanda"], pitch: 1.28, rate: 1.04 },
-          mulher: { names: ["Yara", "Raquel", "Manuela"], pitch: 1.0, rate: 1.0 },
-          "mulher-alegre": { names: ["Giovanna", "Francisca", "Raquel"], pitch: 1.12, rate: 1.06 },
-          "mulher-irritada": { names: ["Thalita", "Yara", "Raquel"], pitch: 0.94, rate: 1.05 },
-          calma: { names: ["Manuela", "Yara", "Fernanda"], pitch: 0.96, rate: 0.92 }
-        };
-        const selected = preferences[profile] || preferences.calma;
-        const locale = accent === "portugal" ? "pt-PT" : "pt-BR";
-        const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
-        const sameLanguage = voices.filter((voice) => String(voice.lang || "").toLowerCase().startsWith(locale.toLowerCase()));
-        const pool = sameLanguage.length ? sameLanguage : voices.filter((voice) => String(voice.lang || "").toLowerCase().startsWith("pt-"));
-        const normalizedNames = selected.names.map((name) => name.toLocaleLowerCase("pt-BR"));
-        const preferred = pool.find((voice) => {
-          const voiceName = String(voice.name || "").toLocaleLowerCase("pt-BR");
-          return normalizedNames.some((name) => voiceName.includes(name));
-        });
-        return {
-          voice: preferred || pool[0] || null,
-          pitch: selected.pitch,
-          rate: Math.max(0.7, Math.min(1.4, (Number(voiceSpeedInput.value) || 1) * selected.rate))
-        };
       }
 
       function speakWithBrowserVoice(text) {
@@ -2083,15 +1957,9 @@
             }
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(prepareSpokenAnswer(text));
-            const preferences = getBrowserVoicePreferences();
             utterance.lang = voiceAccentSelect.value === "portugal" ? "pt-PT" : "pt-BR";
-            if (preferences.voice) {
-              utterance.voice = preferences.voice;
-              utterance.lang = preferences.voice.lang || utterance.lang;
-            }
-            utterance.rate = preferences.rate;
-            utterance.pitch = preferences.pitch;
-            utterance.volume = 1;
+            utterance.rate = Math.max(0.7, Math.min(1.4, Number(voiceSpeedInput.value) || 1));
+            utterance.pitch = 1;
             utterance.onend = () => resolve(true);
             utterance.onerror = () => resolve(false);
             window.speechSynthesis.speak(utterance);
@@ -2116,58 +1984,42 @@
 
           const response = await fetch(VOICE_API_URL, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "audio/mpeg"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               text: spokenText,
               profile: voiceStyleSelect.value,
               accent: voiceAccentSelect.value,
               speed: Number(voiceSpeedInput.value),
-              access_password: accessPassword,
-              format: "mp3"
+              access_password: accessPassword
             })
           });
 
           if (!response.ok) {
-            let errorMessage = "Não foi possível gerar o áudio.";
             const errorData = await response.json().catch(() => ({}));
-            errorMessage = errorData.error || errorMessage;
             if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
-            throw new Error(errorMessage);
+            throw new Error(errorData.error || "Não foi possível gerar o áudio.");
           }
 
-          const returnedProfile = response.headers.get("X-Voice-Profile") || "";
-          const returnedVoice = response.headers.get("X-Voice-Name") || "";
-          const requestedProfile = voiceStyleSelect.value;
-          if (returnedProfile && returnedProfile !== requestedProfile) {
-            throw new Error(
-              "O servidor retornou outra personalidade de voz: " + returnedProfile
-            );
+          const data = await response.json();
+          if (typeof data.audio !== "string" || !data.audio.startsWith("data:audio/")) {
+            throw new Error("O servidor não retornou um áudio válido.");
           }
 
-          // O áudio agora chega como MP3 real, sem base64 dentro de JSON.
-          // Isso reduz a chance de erro de decodificação e mantém a voz neural intacta.
-          lastGeneratedVoiceData = await response.blob();
-          if (!lastGeneratedVoiceData.size) {
-            throw new Error("O servidor retornou um áudio vazio.");
+          lastGeneratedVoiceData = data.audio;
+
+          // O navegador pode bloquear autoplay depois do fetch. Se isso acontecer,
+          // usa a voz nativa do navegador para que o pedido explícito de áudio
+          // continue funcionando.
+          if (await playGeneratedVoice()) {
+            return true;
           }
 
-          console.info(
-            "Baby Yoda TTS:",
-            "perfil=", returnedProfile || requestedProfile,
-            "voz=", returnedVoice || "não informada",
-            "tamanho=", lastGeneratedVoiceData.size,
-            "bytes"
-          );
-
-          return await playGeneratedVoice();
+          return await speakWithBrowserVoice(spokenText);
         } catch (error) {
           console.error("Falha na síntese de voz neural:", error);
-          // Não substitui a voz escolhida por uma voz genérica do navegador.
-          // O botão de reprodução permite tentar novamente sem esconder o erro real.
-          return false;
+          // Mesmo que o Edge TTS/API esteja indisponível, um pedido explícito
+          // de voz deve continuar sendo falado pelo navegador.
+          return await speakWithBrowserVoice(spokenText);
         }
       }
 
@@ -2187,9 +2039,6 @@
         toggleVoiceSettings.setAttribute("aria-expanded", String(!voiceSettings.hidden));
       });
       voicePreviewButton.addEventListener("click", async () => {
-        // Inicializa o áudio exatamente no clique do usuário.
-        ensureVoiceAudioContext();
-        await unlockAudioPlayback();
         voicePreviewButton.disabled = true;
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
@@ -2566,8 +2415,6 @@
           return;
         }
         const requestMessage = message || "Ouça o áudio anexado, identifique a pergunta falada e responda em português.";
-        // Executa ainda dentro da interação do usuário para evitar bloqueio de autoplay.
-        unlockAudioPlayback();
         if (textRequestsConversationStart(message)) {
           setConversationMode(true);
         } else if (textRequestsConversationStop(message)) {
@@ -2688,23 +2535,12 @@
               ? "🔊 Reproduzir novamente"
               : "⚠ Reproduzir resposta";
 
-            if (!ok) {
-              appendAudioPlayer(pending);
-              const voiceError = window.__babyYodaVoiceError;
-              const diagnostic = document.createElement("small");
-              diagnostic.className = "voice-diagnostic";
-              diagnostic.textContent = voiceError
-                ? "A voz foi gerada, mas o navegador bloqueou a reprodução automática. Use o botão ▶ do player acima."
-                : "Não foi possível reproduzir a voz. Use o player acima para testar o áudio gerado.";
-              diagnostic.style.display = "block";
-              diagnostic.style.marginTop = "6px";
-              diagnostic.style.color = "var(--muted-color)";
-              pending.append(diagnostic);
-            }
-
             speakButton.addEventListener("click", async () => {
-              // Regera o áudio usando a configuração atualmente selecionada.
-              // Assim, trocar a personalidade e clicar novamente nunca reutiliza um MP3 antigo.
+              const replayOk = await playGeneratedVoice();
+              if (replayOk) {
+                speakButton.textContent = "🔊 Reproduzir novamente";
+                return;
+              }
               speakButton.disabled = true;
               speakButton.textContent = "🔊 Gerando áudio...";
               const generatedOk = await speakAnswer(answer);
@@ -2712,11 +2548,6 @@
               speakButton.textContent = generatedOk
                 ? "🔊 Reproduzir novamente"
                 : "⚠ Tentar voz novamente";
-              if (!generatedOk) {
-                const existingPlayer = pending.querySelector(".voice-audio-player");
-                if (existingPlayer) existingPlayer.remove();
-                appendAudioPlayer(pending);
-              }
             });
           }
         } catch (error) {
