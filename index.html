@@ -1969,35 +1969,26 @@
       async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
-          // Primeira opção: Web Audio API com o contexto já iniciado pelo clique.
-          // O MP3 continua sendo exatamente o áudio neural retornado pelo Edge TTS.
+          // O backend entrega o MP3 como Blob. O Web Audio reproduz o mesmo
+          // arquivo neural escolhido, sem depender da voz robótica do navegador.
           if (voiceAudioContext) {
-            try {
-              if (voiceAudioContext.state !== "running") {
-                await voiceAudioContext.resume();
-              }
-              const commaIndex = lastGeneratedVoiceData.indexOf(",");
-              const base64 = commaIndex >= 0 ? lastGeneratedVoiceData.slice(commaIndex + 1) : "";
-              const binary = atob(base64);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-              const audioBuffer = await voiceAudioContext.decodeAudioData(bytes.buffer.slice(0));
-              if (voiceAudioSource) {
-                try { voiceAudioSource.stop(); } catch (_) {}
-              }
-              voiceAudioSource = voiceAudioContext.createBufferSource();
-              voiceAudioSource.buffer = audioBuffer;
-              voiceAudioSource.connect(voiceAudioContext.destination);
-              voiceAudioSource.start(0);
-              audioPlaybackUnlocked = true;
-              return true;
-            } catch (contextError) {
-              console.warn("Web Audio não conseguiu reproduzir o MP3 neural:", contextError);
-              window.__babyYodaVoiceError = contextError?.name || String(contextError);
+            if (voiceAudioContext.state !== "running") {
+              await voiceAudioContext.resume();
             }
+            const audioBuffer = await voiceAudioContext.decodeAudioData(
+              await lastGeneratedVoiceData.arrayBuffer()
+            );
+            if (voiceAudioSource) {
+              try { voiceAudioSource.stop(); } catch (_) {}
+            }
+            voiceAudioSource = voiceAudioContext.createBufferSource();
+            voiceAudioSource.buffer = audioBuffer;
+            voiceAudioSource.connect(voiceAudioContext.destination);
+            voiceAudioSource.start(0);
+            audioPlaybackUnlocked = true;
+            return true;
           }
 
-          // Fallback: elemento <audio>, mantendo o MP3 neural.
           if (!currentVoiceAudio) {
             currentVoiceAudio = new Audio();
             currentVoiceAudio.preload = "auto";
@@ -2007,7 +1998,8 @@
             currentVoiceAudio.currentTime = 0;
           }
           currentVoiceAudio.volume = 1;
-          currentVoiceAudio.src = lastGeneratedVoiceData;
+          if (currentVoiceAudio.src) URL.revokeObjectURL(currentVoiceAudio.src);
+          currentVoiceAudio.src = URL.createObjectURL(lastGeneratedVoiceData);
           currentVoiceAudio.load();
           await currentVoiceAudio.play();
           audioPlaybackUnlocked = true;
@@ -2105,47 +2097,52 @@
 
           const response = await fetch(VOICE_API_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "audio/mpeg"
+            },
             body: JSON.stringify({
               text: spokenText,
               profile: voiceStyleSelect.value,
               accent: voiceAccentSelect.value,
               speed: Number(voiceSpeedInput.value),
-              access_password: accessPassword
+              access_password: accessPassword,
+              format: "mp3"
             })
           });
 
           if (!response.ok) {
+            let errorMessage = "Não foi possível gerar o áudio.";
             const errorData = await response.json().catch(() => ({}));
+            errorMessage = errorData.error || errorMessage;
             if (response.status === 401) sessionStorage.removeItem(ACCESS_PASSWORD_KEY);
-            throw new Error(errorData.error || "Não foi possível gerar o áudio.");
+            throw new Error(errorMessage);
           }
 
-          const data = await response.json();
-          if (typeof data.audio !== "string" || !data.audio.startsWith("data:audio/")) {
-            throw new Error("O servidor não retornou um áudio válido.");
-          }
-
-          // Guarda também a identidade devolvida pelo backend para impedir que
-          // uma resposta de outro perfil seja reutilizada por engano.
+          const returnedProfile = response.headers.get("X-Voice-Profile") || "";
+          const returnedVoice = response.headers.get("X-Voice-Name") || "";
           const requestedProfile = voiceStyleSelect.value;
-          if (data.profile !== requestedProfile) {
+          if (returnedProfile && returnedProfile !== requestedProfile) {
             throw new Error(
-              "O servidor retornou outra personalidade de voz: " +
-              String(data.profile || "desconhecida")
+              "O servidor retornou outra personalidade de voz: " + returnedProfile
             );
           }
 
-          lastGeneratedVoiceData = data.audio;
+          // O áudio agora chega como MP3 real, sem base64 dentro de JSON.
+          // Isso reduz a chance de erro de decodificação e mantém a voz neural intacta.
+          lastGeneratedVoiceData = await response.blob();
+          if (!lastGeneratedVoiceData.size) {
+            throw new Error("O servidor retornou um áudio vazio.");
+          }
+
           console.info(
             "Baby Yoda TTS:",
-            "perfil=", data.profile,
-            "voz=", data.voice,
-            "sotaque=", data.accent
+            "perfil=", returnedProfile || requestedProfile,
+            "voz=", returnedVoice || "não informada",
+            "tamanho=", lastGeneratedVoiceData.size,
+            "bytes"
           );
 
-          // O navegador pode bloquear autoplay depois do fetch. Nesse caso não
-          // substituímos o MP3 neural por uma voz robótica do navegador.
           return await playGeneratedVoice();
         } catch (error) {
           console.error("Falha na síntese de voz neural:", error);
@@ -2171,7 +2168,7 @@
         toggleVoiceSettings.setAttribute("aria-expanded", String(!voiceSettings.hidden));
       });
       voicePreviewButton.addEventListener("click", async () => {
-        unlockAudioPlayback();
+        await unlockAudioPlayback();
         voicePreviewButton.disabled = true;
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
