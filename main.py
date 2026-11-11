@@ -418,6 +418,11 @@ def sintetizar_voz():
             "audio": "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("ascii"),
             "profile": profile,
             "accent": accent,
+            "voice": (
+                VOICE_PROFILES[profile]["voice"]
+                if accent == "brasil"
+                else PORTUGAL_VOICE_FALLBACKS.get(profile, "pt-PT-RaquelNeural")
+            ),
         })
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
