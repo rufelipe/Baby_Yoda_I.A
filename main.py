@@ -288,17 +288,14 @@ def wants_audio_response(message):
 
 
 VOICE_PROFILES = {
-    # Cada personalidade usa uma voz neural diferente. Isso evita que a seleção
-    # pareça apenas uma mudança de velocidade/altura quando o navegador reproduz o MP3.
     "sombria": {"voice": "pt-BR-AntonioNeural", "rate": "-12%", "pitch": "-18Hz"},
-    "alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+2%", "pitch": "+1Hz"},
-    "crianca": {"voice": "pt-BR-LeticiaNeural", "rate": "+2%", "pitch": "+4Hz"},
-    "mulher": {"voice": "pt-BR-BrendaNeural", "rate": "0%", "pitch": "0Hz"},
-    "mulher-alegre": {"voice": "pt-BR-GiovannaNeural", "rate": "+3%", "pitch": "+2Hz"},
-    "mulher-irritada": {"voice": "pt-BR-ThalitaNeural", "rate": "+2%", "pitch": "0Hz"},
-    "calma": {"voice": "pt-BR-ManuelaNeural", "rate": "-3%", "pitch": "-1Hz"},
+    "alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+8%", "pitch": "+4Hz"},
+    "crianca": {"voice": "pt-BR-LeticiaNeural", "rate": "+5%", "pitch": "+12Hz"},
+    "mulher": {"voice": "pt-BR-YaraNeural", "rate": "0%", "pitch": "0Hz"},
+    "mulher-alegre": {"voice": "pt-BR-FranciscaNeural", "rate": "+10%", "pitch": "+5Hz"},
+    "mulher-irritada": {"voice": "pt-BR-ThalitaNeural", "rate": "+8%", "pitch": "+1Hz"},
+    "calma": {"voice": "pt-BR-YaraNeural", "rate": "-10%", "pitch": "-2Hz"},
 }
-
 ACCENT_ALIASES = {
     "brasil": "brasil", "portugal": "portugal",
     "carioca": "carioca", "rio": "carioca",
