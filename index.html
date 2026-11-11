@@ -1964,26 +1964,45 @@
           .trim();
       }
 
-      let lastGeneratedVoiceData = "";
+      let lastGeneratedVoiceData = null;
+
+      function ensureVoiceAudioContext() {
+        if (!voiceAudioContext) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return null;
+          voiceAudioContext = new AudioContextClass();
+        }
+        // resume() is intentionally started without waiting here. The call happens
+        // directly from the user's click/submit interaction, preserving the browser
+        // audio permission while the TTS request is processed.
+        if (voiceAudioContext.state !== "running") {
+          voiceAudioContext.resume().catch((error) => {
+            console.debug("Não foi possível ativar o áudio:", error);
+          });
+        }
+        audioPlaybackUnlocked = voiceAudioContext.state === "running";
+        return voiceAudioContext;
+      }
 
       async function playGeneratedVoice() {
         if (!lastGeneratedVoiceData) return false;
         try {
           // O backend entrega o MP3 como Blob. O Web Audio reproduz o mesmo
           // arquivo neural escolhido, sem depender da voz robótica do navegador.
-          if (voiceAudioContext) {
-            if (voiceAudioContext.state !== "running") {
-              await voiceAudioContext.resume();
+          const context = ensureVoiceAudioContext();
+          if (context) {
+            if (context.state !== "running") {
+              await context.resume();
             }
-            const audioBuffer = await voiceAudioContext.decodeAudioData(
+            const audioBuffer = await context.decodeAudioData(
               await lastGeneratedVoiceData.arrayBuffer()
             );
             if (voiceAudioSource) {
               try { voiceAudioSource.stop(); } catch (_) {}
             }
-            voiceAudioSource = voiceAudioContext.createBufferSource();
+            voiceAudioSource = context.createBufferSource();
             voiceAudioSource.buffer = audioBuffer;
-            voiceAudioSource.connect(voiceAudioContext.destination);
+            voiceAudioSource.connect(context.destination);
             voiceAudioSource.start(0);
             audioPlaybackUnlocked = true;
             return true;
@@ -2168,6 +2187,8 @@
         toggleVoiceSettings.setAttribute("aria-expanded", String(!voiceSettings.hidden));
       });
       voicePreviewButton.addEventListener("click", async () => {
+        // Inicializa o áudio exatamente no clique do usuário.
+        ensureVoiceAudioContext();
         await unlockAudioPlayback();
         voicePreviewButton.disabled = true;
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
