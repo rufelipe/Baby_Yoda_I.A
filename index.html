@@ -2049,12 +2049,14 @@
             return true;
           }
 
-          return await speakWithBrowserVoice(spokenText);
+          // Não troca silenciosamente para uma voz genérica do navegador.
+          // Isso fazia a personalidade escolhida parecer não funcionar.
+          return false;
         } catch (error) {
           console.error("Falha na síntese de voz neural:", error);
-          // Mesmo que o Edge TTS/API esteja indisponível, um pedido explícito
-          // de voz deve continuar sendo falado pelo navegador.
-          return await speakWithBrowserVoice(spokenText);
+          // Não substitui a voz escolhida por uma voz genérica do navegador.
+          // O botão de reprodução permite tentar novamente sem esconder o erro real.
+          return false;
         }
       }
 
@@ -2574,11 +2576,8 @@
               : "⚠ Reproduzir resposta";
 
             speakButton.addEventListener("click", async () => {
-              const replayOk = await playGeneratedVoice();
-              if (replayOk) {
-                speakButton.textContent = "🔊 Reproduzir novamente";
-                return;
-              }
+              // Regera o áudio usando a configuração atualmente selecionada.
+              // Assim, trocar a personalidade e clicar novamente nunca reutiliza um MP3 antigo.
               speakButton.disabled = true;
               speakButton.textContent = "🔊 Gerando áudio...";
               const generatedOk = await speakAnswer(answer);
