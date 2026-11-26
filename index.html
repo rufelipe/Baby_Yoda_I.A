@@ -891,6 +891,39 @@
       .user { align-self: flex-end; background: var(--brand-color); color: #ffffff; }
       .error { color: var(--error-color); border: 1px solid #e7b9bf; }
 
+      /* Seletor para alternar entre perguntas sobre documentos e conversa livre. */
+      .mode-switch {
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        background: var(--assistant-message);
+      }
+
+      .mode-option {
+        flex: 1;
+        min-height: 38px;
+        padding: 8px 12px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--muted-color);
+        font-size: 12px;
+        font-weight: 700;
+        transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+      }
+
+      .mode-option[aria-pressed="true"] {
+        border-color: var(--brand-color);
+        background: var(--panel-background);
+        color: var(--text-color);
+      }
+
+      .mode-option:hover:not(:disabled) {
+        color: var(--text-color);
+      }
+
       /* Organiza o campo de texto e o botão na parte inferior do chat. */
       form {
         display: flex;
@@ -1162,6 +1195,10 @@
         </section>
         <!-- Formulário para enviar a pergunta sobre as fontes selecionadas. -->
         <form id="chat-form">
+          <div class="mode-switch" role="group" aria-label="Modo de atendimento">
+            <button class="mode-option" id="documents-mode" type="button" aria-pressed="true">📚 Documentos</button>
+            <button class="mode-option" id="conversation-mode" type="button" aria-pressed="false">💬 Conversar</button>
+          </div>
           <div class="composer-row">
 
             <textarea id="prompt" placeholder="Pergunte sobre as fontes selecionadas..." aria-label="Sua pergunta sobre os arquivos" required></textarea>
@@ -1250,8 +1287,12 @@
       </div>
     </dialog>
     <script>
-      // Endereço da API local: substitua pela URL e rota informadas pelo desenvolvedor do backend.
-      const API_URL = "http://localhost:5000/perguntar";
+      // Mantém o desenvolvimento local e usa o backend do Render quando a aplicação estiver publicada.
+      const API_URL =
+        window.YODA_API_URL ||
+        ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+          ? "http://localhost:5000/perguntar"
+          : "https://baby-yoda-ia.onrender.com/perguntar");
       // O backend deve receber multipart/form-data e extrair as fontes dos documentos.
       // Para garantir respostas somente com base nos arquivos, essa regra também deve ser aplicada no backend.
       const REQUEST_FIELD = "message";
@@ -1263,6 +1304,8 @@
       const form = document.querySelector("#chat-form");
       const input = document.querySelector("#prompt");
             const sendButton = document.querySelector("#send");
+      const documentsModeButton = document.querySelector("#documents-mode");
+      const conversationModeButton = document.querySelector("#conversation-mode");
       const messages = document.querySelector("#messages");
       const fileInput = document.querySelector("#file-input");
 
@@ -1274,6 +1317,7 @@
       // Guarda cada documento e se ele está marcado para ser usado na consulta.
       let sources = [];
       let isSending = false;
+      let conversationMode = false;
       // Botão e elementos visuais do seletor de tema.
       const themeToggle = document.querySelector("#theme-toggle");
       const themeIcon = document.querySelector("#theme-icon");
@@ -1287,6 +1331,30 @@
       const openFeedbackButton = document.querySelector("#open-feedback");
       const feedbackForm = document.querySelector("#feedback-form");
       const feedbackSuccess = document.querySelector("#feedback-success");
+
+      // Atualiza a interface conforme o modo escolhido.
+      function setConversationMode(enabled) {
+        conversationMode = enabled;
+        documentsModeButton.setAttribute("aria-pressed", String(!enabled));
+        conversationModeButton.setAttribute("aria-pressed", String(enabled));
+        input.placeholder = enabled
+          ? "Converse com o YODA..."
+          : "Pergunte sobre as fontes selecionadas...";
+        input.setAttribute(
+          "aria-label",
+          enabled ? "Sua mensagem para conversar com o YODA" : "Sua pergunta sobre os arquivos"
+        );
+        documentsModeButton.title = enabled
+          ? "Voltar para perguntas sobre documentos"
+          : "Perguntar usando as fontes selecionadas";
+        conversationModeButton.title = enabled
+          ? "Conversar sem precisar anexar documentos"
+          : "Ativar conversa livre";
+      }
+
+      documentsModeButton.addEventListener("click", () => setConversationMode(false));
+      conversationModeButton.addEventListener("click", () => setConversationMode(true));
+      setConversationMode(false);
 
       // Atualiza o tema da página, o ícone e o rótulo da próxima opção.
       function setTheme(theme) {
@@ -1580,7 +1648,7 @@
         if (!message || sendButton.disabled) return;
         // Envia apenas as fontes marcadas na lista lateral.
         const selectedSources = sources.filter((source) => source.included);
-                if (!selectedSources.length) {
+        if (!conversationMode && !selectedSources.length) {
           addMessage("Selecione pelo menos uma fonte antes de fazer uma pergunta.", "assistant", true);
           return;
         }
@@ -1606,13 +1674,17 @@
         fileInput.disabled = true;
         renderSources();
         // Mostra um aviso temporário que será substituído pela resposta da IA.
-        const pending = addMessage("Consultando os arquivos...", "assistant");
+        const pending = addMessage(
+          conversationMode ? "Pensando..." : "Consultando os arquivos...",
+          "assistant"
+        );
 
         try {
           // Envia a pergunta e apenas as fontes marcadas como multipart/form-data.
           // O backend precisa aceitar REQUEST_FIELD e vários campos FILES_FIELD.
                     const requestBody = new FormData();
           requestBody.append(REQUEST_FIELD, message);
+          requestBody.append("modo", conversationMode ? "conversar" : "documentos");
           requestBody.append("conversa", conversationContext);
           selectedSources.forEach(({ file }) => requestBody.append(FILES_FIELD, file));
 
@@ -1643,7 +1715,7 @@
           pending.classList.add("error");
           pending.textContent =
             `Não foi possível falar com a IA. ${error.message} ` +
-            "Verifique se o backend está ligado, aceita multipart/form-data com os campos message e files, e permite CORS.";
+            "Verifique se o backend está ligado, aceita multipart/form-data e permite CORS.";
         } finally {
           // Reativa o botão mesmo se a comunicação com o backend falhar.
           sendButton.disabled = false;
