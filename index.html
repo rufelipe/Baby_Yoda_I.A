@@ -2048,8 +2048,14 @@
 
       async function speakAnswer(text) {
         const spokenText = prepareSpokenAnswer(text);
-        if (!spokenText) return false;
-        if (!sessionStorage.getItem(ACCESS_PASSWORD_KEY)) return false;
+        if (!spokenText) {
+          lastVoiceError = "Não há texto para sintetizar.";
+          return false;
+        }
+        if (!sessionStorage.getItem(ACCESS_PASSWORD_KEY)) {
+          lastVoiceError = "Sua sessão expirou. Atualize a página e informe a senha novamente.";
+          return false;
+        }
 
         try {
           if (currentVoiceAudio) {
@@ -2063,6 +2069,7 @@
           await playAudioData(audioData);
           return true;
         } catch (error) {
+          lastVoiceError = lastVoiceError || error.message || "Falha ao reproduzir o áudio neural.";
           console.error("Falha na síntese neural:", error);
           lastGeneratedVoiceData = [];
           if (currentVoiceAudio) {
