@@ -632,7 +632,7 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "temperature": 0.4,
-            "maxOutputTokens": 4096,
+            "maxOutputTokens": 768 if conversation_mode else 3072,
             "responseMimeType": "application/json",
             "responseJsonSchema": {
                 "type": "object",
@@ -651,21 +651,21 @@ def call_gemini(message, conversation, documents, audio_parts=None, conversation
     authentication_statuses = {401, 403}
 
     try:
-        max_retries = int(os.environ.get("GEMINI_MODEL_RETRIES", "2"))
+        max_retries = int(os.environ.get("GEMINI_MODEL_RETRIES", "0"))
     except ValueError:
-        max_retries = 2
+        max_retries = 0
     max_retries = max(0, min(max_retries, 3))
 
     try:
-        request_timeout = float(os.environ.get("GEMINI_REQUEST_TIMEOUT_SECONDS", "45"))
+        request_timeout = float(os.environ.get("GEMINI_REQUEST_TIMEOUT_SECONDS", "15"))
     except ValueError:
-        request_timeout = 45.0
+        request_timeout = 15.0
     request_timeout = max(5.0, min(request_timeout, 90.0))
 
     try:
-        total_budget = float(os.environ.get("GEMINI_FALLBACK_BUDGET_SECONDS", "240"))
+        total_budget = float(os.environ.get("GEMINI_FALLBACK_BUDGET_SECONDS", "50"))
     except ValueError:
-        total_budget = 240.0
+        total_budget = 50.0
     total_budget = max(15.0, min(total_budget, 300.0))
 
     deadline = time.monotonic() + total_budget
