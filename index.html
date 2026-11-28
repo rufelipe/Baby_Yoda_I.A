@@ -2037,15 +2037,15 @@
         const spokenText = prepareSpokenAnswer(text);
         if (!spokenText) return false;
         if (!sessionStorage.getItem(ACCESS_PASSWORD_KEY)) return false;
+        const chunks = splitSpokenText(spokenText);
+        let completedChunks = 0;
 
         try {
           if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          const chunks = splitSpokenText(spokenText);
           lastGeneratedVoiceData = [];
-          let completedChunks = 0;
 
           // Começa pelo primeiro trecho. Enquanto ele toca, o próximo é gerado.
           let nextAudioPromise = requestVoiceChunk(chunks[0]);
