@@ -1531,8 +1531,13 @@
                 <section class="voice-settings" id="voice-settings" hidden aria-label="Configurações de voz">
                   <label for="voice-style">Voz:
                     <select id="voice-style">
-                      <option value="sombria" selected>Masculina</option>
-                      <option value="mulher">Feminina</option>
+                      <option value="sombria">Masculina grave</option>
+                      <option value="alegre">Feminina alegre</option>
+                      <option value="crianca">Voz infantil</option>
+                      <option value="mulher">Feminina natural</option>
+                      <option value="mulher-alegre">Feminina animada</option>
+                      <option value="mulher-irritada">Feminina expressiva</option>
+                      <option value="calma" selected>Feminina calma</option>
                     </select>
                   </label>
                   <select id="voice-accent" hidden aria-hidden="true" tabindex="-1">
@@ -1849,7 +1854,8 @@
         try {
           const saved = JSON.parse(localStorage.getItem(VOICE_SETTINGS_KEY) || "{}");
           if (saved && typeof saved === "object") {
-            voiceStyleSelect.value = saved.style === "mulher" ? "mulher" : "sombria";
+            const availableVoiceStyles = Object.keys(VOICE_PROFILES);
+            voiceStyleSelect.value = availableVoiceStyles.includes(saved.style) ? saved.style : "calma";
             voiceAccentSelect.value = "brasil";
             if (typeof saved.speed === "number") voiceSpeedInput.value = String(Math.min(1.4, Math.max(0.7, saved.speed)));
           }
@@ -1859,7 +1865,7 @@
 
       function saveVoiceSettings() {
         const settings = {
-          style: voiceStyleSelect.value === "mulher" ? "mulher" : "sombria",
+          style: Object.prototype.hasOwnProperty.call(VOICE_PROFILES, voiceStyleSelect.value) ? voiceStyleSelect.value : "calma",
           accent: "brasil",
           speed: Number(voiceSpeedInput.value),
         };
@@ -2037,43 +2043,31 @@
         const spokenText = prepareSpokenAnswer(text);
         if (!spokenText) return false;
         if (!sessionStorage.getItem(ACCESS_PASSWORD_KEY)) return false;
-        const chunks = splitSpokenText(spokenText);
-        let completedChunks = 0;
 
         try {
           if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          lastGeneratedVoiceData = [];
 
-          // Começa pelo primeiro trecho. Enquanto ele toca, o próximo é gerado.
-          let nextAudioPromise = requestVoiceChunk(chunks[0]);
-          for (let index = 0; index < chunks.length; index += 1) {
-            const audioData = await nextAudioPromise;
-            lastGeneratedVoiceData.push(audioData);
-            if (index + 1 < chunks.length) {
-              nextAudioPromise = requestVoiceChunk(chunks[index + 1]);
-            }
-            await playAudioData(audioData);
-            completedChunks = index + 1;
-            if (index + 1 < chunks.length) {
-              await new Promise((resolve) => setTimeout(resolve, 110));
-            }
-          }
+          // Uma única síntese preserva a entonação e a continuidade da frase.
+          const audioData = await requestVoiceChunk(spokenText);
+          lastGeneratedVoiceData = [audioData];
+          await playAudioData(audioData);
           return true;
         } catch (error) {
-          console.error("Falha na síntese neural por trechos:", error);
+          console.error("Falha na síntese neural:", error);
+          lastGeneratedVoiceData = [];
           if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          const remainingText = chunks.slice(completedChunks).join(" ").trim();
-          return remainingText ? await speakWithBrowserVoice(remainingText) : completedChunks > 0;
+          return await speakWithBrowserVoice(spokenText);
         }
       }
 
       loadVoiceSettings();
+      voiceStyleSelect.addEventListener("change", saveVoiceSettings);
       [voiceSpeedInput].forEach((control) => {
         control.addEventListener("change", () => {
           voiceSpeedValue.value = Number(voiceSpeedInput.value).toFixed(1).replace(".", ",") + "x";
