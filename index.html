@@ -1939,7 +1939,7 @@
             current = "";
           }
           if (clean.length > maxLength) {
-            clean.split(/(?<=[,;:])\\s+/).forEach((part) => {
+            clean.split(/(?<=[,;:])\s+/).forEach((part) => {
               if (current && current.length + part.length + 1 > maxLength) {
                 chunks.push(current.trim());
                 current = "";
