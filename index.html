@@ -1978,9 +1978,13 @@
             currentVoiceAudio.currentTime = 0;
           }
 
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
           const response = await fetch(VOICE_API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
               text: spokenText,
               profile: voiceStyleSelect.value,
@@ -1989,6 +1993,8 @@
               access_password: accessPassword
             })
           });
+
+          clearTimeout(timeoutId);
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -2002,16 +2008,9 @@
           }
 
           lastGeneratedVoiceData = data.audio;
-
-          // Se o navegador bloquear o autoplay depois do fetch, não trocamos
-          // a voz neural por speechSynthesis, que costuma soar mais robótica.
-          // O botão de reprodução continua disponível para iniciar o MP3 neural
-          // diretamente após um clique do usuário.
           return await playGeneratedVoice();
         } catch (error) {
           console.error("Falha na síntese de voz neural:", error);
-          // Mesmo que o Edge TTS/API esteja indisponível, um pedido explícito
-          // de voz deve continuar sendo falado pelo navegador.
           return await speakWithBrowserVoice(spokenText);
         }
       }
