@@ -2101,7 +2101,7 @@
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
         voicePreviewButton.disabled = false;
-        voicePreviewButton.textContent = ok ? "▶ Testar voz selecionada" : "⚠ Falha ao gerar voz";
+        voicePreviewButton.textContent = ok ? "▶ Testar voz selecionada" : "⚠ " + (lastVoiceError || "Falha ao gerar voz").slice(0, 42);
         voicePreviewButton.title = ok ? "" : lastVoiceError;
       });
 
