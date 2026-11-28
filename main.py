@@ -374,11 +374,19 @@ def synthesize_voice(text, profile_name="calma", accent="brasil", speed=1.0):
             pitch=pitch,
             volume="+0%",
         )
-        audio_chunks = []
-        async for chunk in communicator.stream():
-            if chunk.get("type") == "audio":
-                audio_chunks.append(chunk["data"])
-        return b"".join(audio_chunks)
+        # Salva o MP3 completo para manter a mesma síntese contínua que já
+        # funcionava bem antes; o navegador reproduz um único áudio por resposta.
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+            temp_path = temp_file.name
+        try:
+            await communicator.save(temp_path)
+            with open(temp_path, "rb") as audio_file:
+                return audio_file.read()
+        finally:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
     try:
         return asyncio.run(generate())
