@@ -374,17 +374,11 @@ def synthesize_voice(text, profile_name="calma", accent="brasil", speed=1.0):
             pitch=pitch,
             volume="+0%",
         )
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
-            temp_path = temp_file.name
-        try:
-            await communicator.save(temp_path)
-            with open(temp_path, "rb") as audio_file:
-                return audio_file.read()
-        finally:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
+        audio_chunks = []
+        async for chunk in communicator.stream():
+            if chunk.get("type") == "audio":
+                audio_chunks.append(chunk["data"])
+        return b"".join(audio_chunks)
 
     try:
         return asyncio.run(generate())
