@@ -2045,6 +2045,7 @@
           }
           const chunks = splitSpokenText(spokenText);
           lastGeneratedVoiceData = [];
+          let completedChunks = 0;
 
           // Começa pelo primeiro trecho. Enquanto ele toca, o próximo é gerado.
           let nextAudioPromise = requestVoiceChunk(chunks[0]);
@@ -2055,16 +2056,20 @@
               nextAudioPromise = requestVoiceChunk(chunks[index + 1]);
             }
             await playAudioData(audioData);
+            completedChunks = index + 1;
+            if (index + 1 < chunks.length) {
+              await new Promise((resolve) => setTimeout(resolve, 110));
+            }
           }
           return true;
         } catch (error) {
           console.error("Falha na síntese neural por trechos:", error);
-          lastGeneratedVoiceData = [];
           if (currentVoiceAudio) {
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          return await speakWithBrowserVoice(spokenText);
+          const remainingText = chunks.slice(completedChunks).join(" ").trim();
+          return remainingText ? await speakWithBrowserVoice(remainingText) : completedChunks > 0;
         }
       }
 
