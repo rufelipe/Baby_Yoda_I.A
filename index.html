@@ -1932,6 +1932,7 @@
       }
 
       let lastGeneratedVoiceData = [];
+      let lastVoiceError = "";
 
       function splitSpokenText(text, maxLength = 220) {
         const sentences = String(text || "").match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
@@ -1963,7 +1964,8 @@
       async function requestVoiceChunk(text) {
         const accessPassword = sessionStorage.getItem(ACCESS_PASSWORD_KEY);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        lastVoiceError = "";
         try {
           const response = await fetch(VOICE_API_URL, {
             method: "POST",
@@ -1987,6 +1989,11 @@
             throw new Error("O servidor não retornou um áudio válido.");
           }
           return data.audio;
+        } catch (error) {
+          lastVoiceError = error.name === "AbortError"
+            ? "A geração neural demorou mais de 20 segundos."
+            : (error.message || "Falha desconhecida na síntese neural.");
+          throw error;
         } finally {
           clearTimeout(timeoutId);
         }
@@ -2062,7 +2069,7 @@
             currentVoiceAudio.pause();
             currentVoiceAudio.currentTime = 0;
           }
-          return await speakWithBrowserVoice(spokenText);
+          return false;
         }
       }
 
@@ -2087,7 +2094,8 @@
         voicePreviewButton.textContent = "⏳ Gerando áudio...";
         const ok = await speakAnswer("Olá! Esta é uma demonstração da voz selecionada para o Baby Yoda IA.");
         voicePreviewButton.disabled = false;
-        voicePreviewButton.textContent = ok ? "▶ Testar voz selecionada" : "⚠ Tentar novamente";
+        voicePreviewButton.textContent = ok ? "▶ Testar voz selecionada" : "⚠ Falha ao gerar voz";
+        voicePreviewButton.title = ok ? "" : lastVoiceError;
       });
 
       // Abre ou fecha o menu de configurações ao clicar na engrenagem.
